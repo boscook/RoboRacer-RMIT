@@ -1,0 +1,48 @@
+# ROS 2 / colcon
+build/
+install/
+log/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+roboracer_logs/
+
+# ROS bags
+*.bag
+*.db3
+rosbag2_*/
+
+# Generated maps / pose graphs
+*.pgm
+*.posegraph
+*.data
+
+# Generated track memory
+track_memory/archive/
+
+# Temporary files
+*.tmp
+*.bak
+*.backup
+*~
+
+# Secrets
+.env
+*.key
+*.pem
+credentials*
+secrets*
+token*
