@@ -1,0 +1,9 @@
+/CLaserOdometry2DNode:
+  ros__parameters:
+    laser_scan_topic: "/scan"
+    odom_topic: "/odom"
+    base_frame_id: "base_link"
+    odom_frame_id: "odom"
+    publish_tf: true
+    init_pose_from_topic: ""
+    freq: 20.0
