@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>RoboRacer Autonomous</title>
+  <meta name="description" content="Autonomous RoboRacer using ROS 2, Hokuyo LiDAR, RF2O, SLAM Toolbox and VESC.">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="hero">
+    <div class="wrap">
+      <p class="eyebrow">RMIT Engineering Capstone</p>
+      <h1>RoboRacer Autonomous</h1>
+      <p class="lead">Real-time LiDAR SLAM, unknown-track exploration, physical vehicle control and lap-to-lap trajectory learning on NVIDIA Jetson.</p>
+      <div class="actions">
+        <a class="button primary" href="https://github.com/boscook/RoboRacer-Autonomous">View Source Code</a>
+        <a class="button" href="#architecture">Architecture</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section>
+      <h2>Project Goal</h2>
+      <p>The car is designed to be placed on an unknown closed track, create a map while driving, determine the drivable corridor from live LiDAR data, complete a lap autonomously, remember the track, and improve subsequent laps.</p>
+    </section>
+
+    <section class="grid cards">
+      <article>
+        <h3>Perception</h3>
+        <p>Hokuyo 2D LiDAR provides the live <code>/scan</code> stream used by both localisation and reactive track detection.</p>
+      </article>
+      <article>
+        <h3>Localisation + Mapping</h3>
+        <p>RF2O produces laser odometry while SLAM Toolbox builds a live occupancy-grid map.</p>
+      </article>
+      <article>
+        <h3>Autonomous Control</h3>
+        <p>A LiDAR gap detector and race controller generate steering and speed commands for the physical car.</p>
+      </article>
+      <article>
+        <h3>Safety</h3>
+        <p>An independent safety supervisor and manual master enable sit in front of the final Autoware-to-VESC command path.</p>
+      </article>
+      <article>
+        <h3>Track Memory</h3>
+        <p>The first lap is recorded and used to generate a learned path for later laps.</p>
+      </article>
+      <article>
+        <h3>Physical Platform</h3>
+        <p>NVIDIA Jetson Orin Nano, Hokuyo LiDAR, VESC 6 MK VI, brushless motor and steering servo.</p>
+      </article>
+    </section>
+
+    <section id="architecture">
+      <h2>System Architecture</h2>
+      <div class="flow">
+        <div>Hokuyo LiDAR</div><span>↓</span>
+        <div>/scan</div><span>↓</span>
+        <div>RF2O + Track Detector</div><span>↓</span>
+        <div>SLAM + Exploration Controller</div><span>↓</span>
+        <div>Controller Selector</div><span>↓</span>
+        <div>Safety Supervisor</div><span>↓</span>
+        <div>Safe Control Adapter</div><span>↓</span>
+        <div>Autoware Control</div><span>↓</span>
+        <div>VESC Bridge</div><span>↓</span>
+        <div>Physical Vehicle</div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Lap Learning</h2>
+      <div class="timeline">
+        <div><strong>Lap 1</strong><span>Explore, map and record</span></div>
+        <div><strong>Lap Complete</strong><span>Stop and build memory</span></div>
+        <div><strong>Memory Ready</strong><span>Save map, pose graph and learned path</span></div>
+        <div><strong>Lap 2+</strong><span>Follow learned trajectory with live LiDAR safety</span></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Core Software</h2>
+      <pre><code>src/
+├── roboracer_track_detector/
+├── roboracer_track_memory/
+├── roboracer_autoware_interface/
+├── roboracer_localization_adapter/
+├── roboracer_bringup/
+└── roboracer_description/
+
+config/
+├── rf2o.yaml
+└── slam_toolbox.yaml
+
+scripts/
+└── roboracer_physical.sh</code></pre>
+    </section>
+
+    <section>
+      <h2>Physical Testing</h2>
+      <p>The vehicle is tested in stages: software-only checks, wheels-up actuator validation, low-speed ground testing, measured braking and steering validation, then progressive speed increases.</p>
+      <div class="notice">The vehicle should always start disarmed. Keep a manual stop/disarm method available during physical testing.</div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">RoboRacer Autonomous · Engineering Capstone Project</div>
+  </footer>
+</body>
+</html>
