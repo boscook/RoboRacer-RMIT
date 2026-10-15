@@ -134,14 +134,6 @@ RoboRacer-Autonomous/
 └── .github/workflows/
 ```
 
-## GitHub Pages
-
-Project website:
-
-https://boscook.github.io/RoboRacer-Autonomous/
-
-The static website source is under `docs/`.
-
 ## Development Status
 
 Current work focuses on full physical integration:
