@@ -148,6 +148,12 @@ Current work focuses on full physical integration:
 - learned trajectory following
 - staged physical testing
 
+## Team Members 
+- Bosco Tam
+- Sebastian Schlegel
+- Jerrell Isiderio
+- Brendan Duong
+
 ## Acknowledgements
 
 This project uses and builds on open-source ROS 2, Autoware, SLAM Toolbox, RF2O, Hokuyo ROS drivers, VESC ROS drivers, and RoboRacer/F1TENTH ecosystem work.
