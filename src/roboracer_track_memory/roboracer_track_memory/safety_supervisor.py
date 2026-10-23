@@ -7,6 +7,7 @@ import rclpy
 from rclpy.node import Node
 
 from sensor_msgs.msg import LaserScan
+from nav_msgs.msg import Odometry
 from std_msgs.msg import Float64, String
 
 
@@ -32,14 +33,14 @@ class SafetySupervisor(Node):
 
         # Hokuyo normally runs at ~40 Hz.
         # If scan becomes stale, stop.
-        self.scan_timeout = 0.25
+        self.scan_timeout = 0.5  # no_stutter: sim LiDAR can pause
 
         # ==================================================
         # DYNAMIC RACE SAFETY PARAMETERS
         # ==================================================
 
         # Absolute minimum emergency distance.
-        self.minimum_emergency_distance = 0.40
+        self.minimum_emergency_distance = 0.25
 
         # Approximate usable braking deceleration.
         #
@@ -51,10 +52,10 @@ class SafetySupervisor(Node):
         self.reaction_time = 0.18  # seconds
 
         # Physical margin after theoretical stopping point.
-        self.stop_margin = 0.30  # metres
+        self.stop_margin = 0.10  # metres
 
         # Extra zone before emergency braking begins.
-        self.minimum_slow_margin = 0.60
+        self.minimum_slow_margin = 0.15
 
         # Maximum requested racing speed expected.
         self.maximum_expected_speed = 4.0
@@ -66,9 +67,25 @@ class SafetySupervisor(Node):
         self.requested_speed = 0.0
         self.requested_steering = 0.0
 
+        # Real speed from the pose (position differencing).
+        self.measured_speed = None
+        self.last_pose_s = None
+        self.pose_hist = deque(maxlen=64)
+        self.speed_margin = 0.0
+        # Smooth speed shaping
+        self.speed_buffer = 0.15      # m kept beyond the stop point
+        self.speed_rise_rate = 3.0    # m/s per second
+        self.last_output_speed = 0.0
+        self.last_output_s = None
+
         self.last_scan_time = None
 
+        self.stuck_since = None
+        self.reverse_until = None
+        self.reverse_steering = 0.0
+
         self.front_distance = float('inf')
+        self.block_distance = float('inf')
         self.wide_distance = float('inf')
 
         # ==================================================
@@ -108,6 +125,13 @@ class SafetySupervisor(Node):
             Float64,
             '/roboracer/selected/speed',
             self.speed_callback,
+            10
+        )
+
+        self.create_subscription(
+            Odometry,
+            '/localization/kinematic_state',
+            self.pose_callback,
             10
         )
 
@@ -199,6 +223,20 @@ class SafetySupervisor(Node):
     # COMMAND INPUTS
     # ==================================================
 
+    def pose_callback(self, msg):
+
+        t = self.get_clock().now().nanoseconds / 1e9
+        p = msg.pose.pose.position
+        self.pose_hist.append((t, p.x, p.y))
+        while (len(self.pose_hist) > 2 and
+               t - self.pose_hist[1][0] >= 0.3):
+            self.pose_hist.popleft()
+        t0, x0, y0 = self.pose_hist[0]
+        if t - t0 > 0.15:
+            self.measured_speed = (
+                math.hypot(p.x - x0, p.y - y0) / (t - t0))
+        self.last_pose_s = t
+
     def speed_callback(self, msg):
 
         self.requested_speed = float(
@@ -243,7 +281,13 @@ class SafetySupervisor(Node):
     def scan_callback(self, msg):
 
         front_values = []
+        straight_values = []
+        block_values = []  # steady_strip
         wide_values = []
+
+        kappa = math.tan(self.requested_steering) / 0.32
+        kappa_abs = abs(kappa)
+        turn_sign = 1.0 if kappa >= 0.0 else -1.0
 
         angle = msg.angle_min
 
@@ -264,22 +308,36 @@ class SafetySupervisor(Node):
                         float(distance)
                     )
 
-                if (
-                    abs(angle) <=
-                    self.front_half_angle
-                ):
-
-                    front_values.append(
-                        float(distance)
-                    )
+                # path_distance (replaces steer_aware_cone): distance
+                # along the steering arc, inside a car-wide strip.
+                px = distance * math.cos(angle)
+                py = distance * math.sin(angle)
+                if px > 0.0:
+                    if kappa_abs < 1e-3:
+                        lat, along = abs(py), px
+                    else:
+                        R = 1.0 / kappa_abs
+                        yy = py * turn_sign
+                        lat = abs(math.hypot(px, yy - R) - R)
+                        phi = math.atan2(px, R - yy)
+                        along = R * phi if phi > 0.0 else 99.0
+                    if lat <= 0.16:
+                        front_values.append(float(along))
+                    if abs(py) <= 0.16:
+                        straight_values.append(float(px))
+                if abs(angle) <= math.radians(10.0):
+                    block_values.append(float(distance))
 
             angle += msg.angle_increment
 
-        self.front_distance = (
-            self.robust_distance(
-                front_values
-            )
-        )
+        # 2nd-closest hit in the strip (ignores one noisy beam).
+        def second(v):
+            v.sort()
+            return v[min(1, len(v) - 1)] if v else float('inf')
+
+        self.front_distance = max(second(front_values),
+                                  second(straight_values))
+        self.block_distance = second(block_values)
 
         self.wide_distance = (
             self.robust_distance(
@@ -366,11 +424,25 @@ class SafetySupervisor(Node):
     def calculate_dynamic_distances(self):
 
         # Only forward speed matters.
+        velocity = self.requested_speed
+
+        # Size the zone from how fast the car really moves.
+        now_s = self.get_clock().now().nanoseconds / 1e9
+        if (
+            self.measured_speed is not None and
+            self.last_pose_s is not None and
+            now_s - self.last_pose_s < 0.5
+        ):
+            velocity = min(
+                velocity,
+                self.measured_speed + self.speed_margin
+            )
+
         velocity = max(
             0.0,
             min(
                 self.maximum_expected_speed,
-                self.requested_speed
+                velocity
             )
         )
 
@@ -421,6 +493,11 @@ class SafetySupervisor(Node):
             approaching_speed = abs(
                 self.closing_rate
             )
+            if self.measured_speed is not None:
+                approaching_speed = max(
+                    0.0,
+                    approaching_speed - self.measured_speed
+                )
 
             # Add another reaction-time term.
             emergency_distance += (
@@ -510,6 +587,19 @@ class SafetySupervisor(Node):
         # safety system only protects forward motion.
         # ==================================================
 
+        now_s = now.nanoseconds / 1e9
+
+        # Active blind reverse manoeuvre (unstick).
+        if self.reverse_until is not None:
+            if now_s < self.reverse_until:
+                self.publish_command(
+                    -0.30,
+                    self.reverse_steering,
+                    'REVERSE'
+                )
+                return
+            self.reverse_until = None
+
         if requested_speed < 0.0:
 
             self.publish_command(
@@ -526,14 +616,54 @@ class SafetySupervisor(Node):
 
         self.calculate_dynamic_distances()
 
+        if self.block_distance > self.dynamic_emergency_distance:
+            self.stuck_since = None
+
         # ==================================================
         # EMERGENCY STOP
         # ==================================================
 
         if (
-            self.front_distance <=
-            self.dynamic_emergency_distance
+            self.block_distance <=
+            min(
+                self.dynamic_emergency_distance,
+                self.minimum_emergency_distance + 0.10
+            )
         ):
+
+            # Creep out of a wall: allow a slow forward move
+            # while real free space remains ahead.
+            if (
+                requested_speed > 0.0 and
+                self.block_distance >
+                self.minimum_emergency_distance + 0.03
+            ):
+                self.publish_command(
+                    min(requested_speed, 0.20),
+                    requested_steering,
+                    'SLOW'
+                )
+                self.last_output_speed = min(requested_speed, 0.20)
+                self.last_output_s = now_s
+                return
+
+            # Boxed in for 1.5 s: back out blindly for ~1.2 s,
+            # steering opposite so the nose swings toward the exit.
+            if self.stuck_since is None:
+                self.stuck_since = now_s
+            elif now_s - self.stuck_since > 1.5:
+                self.stuck_since = None
+                self.reverse_until = now_s + 1.2
+                self.reverse_steering = max(
+                    -0.35, min(0.35, -requested_steering)
+                )
+                self.get_logger().warn('BOXED IN - reversing')
+                self.publish_command(
+                    -0.30,
+                    self.reverse_steering,
+                    'REVERSE'
+                )
+                return
 
             self.publish_command(
                 0.0,
@@ -544,61 +674,47 @@ class SafetySupervisor(Node):
             return
 
         # ==================================================
-        # SLOW ZONE
+        # SMOOTH SPEED FROM FREE SPACE
+        # Fastest speed that can still stop before
+        # (front - stop_margin - speed_buffer):
+        #   v*t + v^2/(2a) = d
         # ==================================================
 
-        if (
-            self.front_distance <
-            self.dynamic_slow_distance
-        ):
-
-            span = (
-                self.dynamic_slow_distance -
-                self.dynamic_emergency_distance
+        a_brk = self.braking_deceleration
+        t_r = self.reaction_time
+        d = (
+            self.front_distance -
+            self.stop_margin -
+            self.speed_buffer
+        )
+        if not math.isfinite(d):
+            v_allow = requested_speed
+        elif d <= 0.0:
+            v_allow = 0.0
+        else:
+            v_allow = (
+                -a_brk * t_r +
+                math.sqrt((a_brk * t_r) ** 2 + 2.0 * a_brk * d)
             )
 
-            if span <= 0.001:
+        target = min(requested_speed, v_allow)
+        # Never stall while real space remains.
+        target = max(target, min(requested_speed, 0.20))
 
-                factor = 0.0
-
-            else:
-
-                factor = (
-                    self.front_distance -
-                    self.dynamic_emergency_distance
-                ) / span
-
-            factor = max(
-                0.0,
-                min(
-                    1.0,
-                    factor
-                )
+        now_s = now.nanoseconds / 1e9
+        if self.last_output_s is not None:
+            dt = max(0.0, min(0.2, now_s - self.last_output_s))
+            target = min(
+                target,
+                self.last_output_speed + self.speed_rise_rate * dt
             )
-
-            # Smoothly reduce speed toward zero
-            # as braking boundary approaches.
-            safe_speed = (
-                requested_speed *
-                factor
-            )
-
-            self.publish_command(
-                safe_speed,
-                requested_steering,
-                'SLOW'
-            )
-
-            return
-
-        # ==================================================
-        # CLEAR
-        # ==================================================
+        self.last_output_s = now_s
+        self.last_output_speed = target
 
         self.publish_command(
-            requested_speed,
+            target,
             requested_steering,
-            'CLEAR'
+            'SLOW' if target < requested_speed - 0.05 else 'CLEAR'
         )
 
     # ==================================================
@@ -611,6 +727,11 @@ class SafetySupervisor(Node):
         steering,
         state
     ):
+
+        if state != 'CLEAR' and state != 'SLOW':
+            self.last_output_speed = max(0.0, float(speed))
+            self.last_output_s = (
+                self.get_clock().now().nanoseconds / 1e9)
 
         speed_msg = Float64()
         speed_msg.data = float(

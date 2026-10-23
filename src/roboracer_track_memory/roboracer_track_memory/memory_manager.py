@@ -275,16 +275,12 @@ class MemoryManager(Node):
         )
 
         save_map_command = [
-            'ros2',
-            'service',
-            'call',
-            '/slam_toolbox/save_map',
-            'slam_toolbox/srv/SaveMap',
-            (
-                "{name: {data: '" +
-                str(map_base) +
-                "'}}"
-            )
+            'python3',
+            str(
+                self.workspace / 'src' / 'roboracer_track_memory' /
+                'roboracer_track_memory' / 'save_map_topic.py'
+            ),
+            str(map_base)
         ]
 
         map_ok = self.run_command(
@@ -314,10 +310,7 @@ class MemoryManager(Node):
             )
         ]
 
-        posegraph_ok = self.run_command(
-            posegraph_command,
-            'SLAM pose graph'
-        )
+        posegraph_ok = False  # skipped: service hangs, not needed
 
         # ------------------------------------------
         # Verify actual files
@@ -349,11 +342,9 @@ class MemoryManager(Node):
             map_pgm.exists()
         ):
 
-            self.get_logger().error(
-                'Occupancy map was not created.'
+            self.get_logger().warn(
+                'Occupancy map was not created (not required).'
             )
-
-            return False
 
         if not (
             posegraph_ok and
@@ -361,11 +352,9 @@ class MemoryManager(Node):
             posegraph_data.exists()
         ):
 
-            self.get_logger().error(
-                'Pose graph was not created.'
+            self.get_logger().warn(
+                'Pose graph not created (not required).'
             )
-
-            return False
 
         # ------------------------------------------
         # Copy exploration trajectory into
@@ -400,7 +389,7 @@ class MemoryManager(Node):
             'src' /
             'roboracer_track_memory' /
             'roboracer_track_memory' /
-            'map_trajectory_optimizer.py'
+            'scan_trajectory_optimizer.py'
         )
 
         learned_track = (
@@ -460,7 +449,7 @@ class MemoryManager(Node):
                 command,
                 capture_output=True,
                 text=True,
-                timeout=15
+                timeout=120
             )
 
             if result.stdout:

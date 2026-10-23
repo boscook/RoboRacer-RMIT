@@ -8,7 +8,19 @@ import rclpy
 from rclpy.node import Node
 
 from nav_msgs.msg import Odometry
+from sensor_msgs.msg import LaserScan
 from std_msgs.msg import UInt32
+
+
+def sector_min(scan, lo_deg, hi_deg, cap=3.0):
+    """Smallest valid range in an angular sector (degrees, 0 = straight ahead)."""
+    best = cap
+    lo, hi = math.radians(lo_deg), math.radians(hi_deg)
+    for i, r in enumerate(scan.ranges):
+        a = scan.angle_min + i * scan.angle_increment
+        if lo <= a <= hi and math.isfinite(r) and scan.range_min < r < best:
+            best = r
+    return best
 
 
 class TrajectoryRecorder(Node):
@@ -41,6 +53,10 @@ class TrajectoryRecorder(Node):
         self.last_y = None
 
         self.finished = False
+
+        self.scan = None
+        self.create_subscription(
+            LaserScan, '/scan', self.scan_callback, 10)
 
         self.pose_sub = self.create_subscription(
             Odometry,
@@ -126,6 +142,14 @@ class TrajectoryRecorder(Node):
         if distance < self.record_spacing:
             return
 
+        # fix_lap1: skip reversing / re-driving the same bit of track.
+        ahead = (
+            (x - self.last_x) * math.cos(yaw) +
+            (y - self.last_y) * math.sin(yaw)
+        )
+        if ahead <= 0.0 and distance < 1.0:
+            return
+
         # Reject obviously bad localization jumps.
         if distance > 1.0:
 
@@ -147,6 +171,9 @@ class TrajectoryRecorder(Node):
         self.last_x = x
         self.last_y = y
 
+    def scan_callback(self, msg):
+        self.scan = msg
+
     def store_point(
         self,
         x,
@@ -154,12 +181,22 @@ class TrajectoryRecorder(Node):
         yaw
     ):
 
+        # Wall distances to the left / right of the car (lidar, +-10 deg
+        # around +-90 deg). Used to build the racing line without a SLAM map.
+        if self.scan is not None:
+            left = sector_min(self.scan, 80.0, 100.0)
+            right = sector_min(self.scan, -100.0, -80.0)
+        else:
+            left = right = 3.0
+
         self.points.append(
             [
                 len(self.points),
                 x,
                 y,
-                yaw
+                yaw,
+                left,
+                right
             ]
         )
 
@@ -210,7 +247,9 @@ class TrajectoryRecorder(Node):
                     'index',
                     'x',
                     'y',
-                    'yaw'
+                    'yaw',
+                    'left',
+                    'right'
                 ]
             )
 
@@ -221,7 +260,9 @@ class TrajectoryRecorder(Node):
                         point[0],
                         f'{point[1]:.6f}',
                         f'{point[2]:.6f}',
-                        f'{point[3]:.6f}'
+                        f'{point[3]:.6f}',
+                        f'{point[4]:.3f}',
+                        f'{point[5]:.3f}'
                     ]
                 )
 

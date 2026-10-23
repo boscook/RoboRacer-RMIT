@@ -27,15 +27,15 @@ class TrackController(Node):
         # Adapted from RoboRacer Milestone 5
         # ==================================================
 
-        self.max_speed = 4.0
+        self.max_speed = 1.0
 
         self.straight_speed = 3.2
         self.fast_corner_speed = 2.5
         self.medium_corner_speed = 2.0
         self.sharp_corner_speed = 1.5
 
-        self.avoid_speed = 1.2
-        self.recover_speed = 1.5
+        self.avoid_speed = 0.5
+        self.recover_speed = 0.4
 
         # ==================================================
         # DYNAMIC SPEED / CLEARANCE
@@ -49,11 +49,11 @@ class TrackController(Node):
         # OBSTACLE DISTANCES
         # ==================================================
 
-        self.avoid_distance = 1.30
-        self.dynamic_avoid_distance = 2.00
+        self.avoid_distance = 0.60
+        self.dynamic_avoid_distance = 0.90
 
-        self.stop_distance = 0.50
-        self.clear_distance = 1.50
+        self.stop_distance = 0.28
+        self.clear_distance = 0.80
 
         # ==================================================
         # RANGE RATE
@@ -71,7 +71,7 @@ class TrackController(Node):
 
         self.max_steering_angle = 0.35
 
-        self.steering_gain = 1.15
+        self.steering_gain = 0.80
         self.avoid_steering = 0.30
         self.recover_gain = 1.30
 

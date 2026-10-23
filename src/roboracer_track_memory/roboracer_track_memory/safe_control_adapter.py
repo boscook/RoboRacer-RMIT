@@ -203,7 +203,8 @@ class SafeControlAdapter(Node):
 
         allowed_states = {
             'CLEAR',
-            'SLOW'
+            'SLOW',
+            'REVERSE'
         }
 
         drive_authorized = (
@@ -214,10 +215,13 @@ class SafeControlAdapter(Node):
 
         if drive_authorized:
 
-            velocity = max(
-                0.0,
-                self.safe_speed
-            )
+            if self.safety_state == 'REVERSE':
+                velocity = self.safe_speed
+            else:
+                velocity = max(
+                    0.0,
+                    self.safe_speed
+                )
 
         else:
 

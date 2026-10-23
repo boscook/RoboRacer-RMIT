@@ -2,6 +2,7 @@
 
 import csv
 import math
+from collections import deque
 from pathlib import Path
 
 import numpy as np
@@ -36,7 +37,7 @@ class TrajectoryFollower(Node):
 
         self.declare_parameter(
             'lookahead_distance',
-            0.60
+            2.25
         )
 
         self.declare_parameter(
@@ -46,7 +47,7 @@ class TrajectoryFollower(Node):
 
         self.declare_parameter(
             'max_steering_angle',
-            0.35
+            0.52
         )
 
         self.declare_parameter(
@@ -59,6 +60,13 @@ class TrajectoryFollower(Node):
                 'track_file'
             ).value
         ).expanduser()
+
+        self.pose_hist = deque(maxlen=64)
+        self.v_meas = 0.0
+        self.declare_parameter('predict_time', 0.20)
+        self.predict_time = float(
+            self.get_parameter('predict_time').value)
+        self.last_steer = 0.0
 
         self.lookahead = float(
             self.get_parameter(
@@ -88,15 +96,13 @@ class TrajectoryFollower(Node):
         # LOAD TRACK
         # ==================================================
 
-        (
-            self.points,
-            self.track_speed
-        ) = self.load_track(
-            self.track_file
-        )
-
-        self.number_of_points = len(
-            self.points
+        # The learned track appears only after lap 1, so wait for it.
+        self.points = None
+        self.track_speed = None
+        self.number_of_points = 0
+        self.declare_parameter('max_speed', 3.5)
+        self.max_speed = float(
+            self.get_parameter('max_speed').value
         )
 
         self.last_nearest_index = None
@@ -349,7 +355,7 @@ class TrajectoryFollower(Node):
 
             index = next_index
 
-            if accumulated >= self.lookahead:
+            if accumulated >= self.active_lookahead:
                 return index
 
         return nearest_index
@@ -422,10 +428,148 @@ class TrajectoryFollower(Node):
     # CALLBACK
     # ==================================================
 
+    # ==================================================
+    # LAP-BY-LAP LEARNING
+    # ==================================================
+
+    def ilc_init(self):
+        n = self.number_of_points
+        self.ilc_gain = 0.3
+        self.base_points = self.points.copy()
+        self.base_speed = self.track_speed.copy()
+        t = (np.roll(self.base_points, -1, axis=0) -
+             np.roll(self.base_points, 1, axis=0))
+        t /= (np.linalg.norm(t, axis=1, keepdims=True) + 1e-9)
+        self.normals = np.column_stack([-t[:, 1], t[:, 0]])
+        clr = np.full(n, 0.40)
+        try:
+            with open(self.track_file) as f:
+                rows = list(csv.DictReader(f))
+            if len(rows) == n and 'clearance' in rows[0]:
+                clr = np.array([float(r['clearance']) for r in rows])
+        except Exception:
+            pass
+        self.shift_limit = np.clip(clr - 0.20, 0.0, 0.35)
+        self.offset = np.zeros(n)
+        self.err_sum = np.zeros(n)
+        self.err_cnt = np.zeros(n)
+        self.ilc_prev_index = None
+        self.ilc_lap = 0
+
+    @staticmethod
+    def circ_smooth(v, passes):
+        for _ in range(passes):
+            v = 0.25 * np.roll(v, 1) + 0.5 * v + 0.25 * np.roll(v, -1)
+        return v
+
+    def ilc_record(self, nearest, x, y):
+        n = self.number_of_points
+        cand = (nearest + np.arange(-25, 4)) % n
+        d2 = np.sum((self.base_points[cand] - [x, y]) ** 2, axis=1)
+        nearest = int(cand[int(np.argmin(d2))])
+        e = float(np.dot(
+            np.array([x, y]) - self.base_points[nearest],
+            self.normals[nearest]))
+        self.err_sum[nearest] += e
+        self.err_cnt[nearest] += 1
+        n = self.number_of_points
+        prev = self.ilc_prev_index
+        if prev is not None and prev > 0.9 * n and nearest < 0.1 * n:
+            self.ilc_update()
+        self.ilc_prev_index = nearest
+
+    def ilc_update(self):
+        n = self.number_of_points
+        seen = self.err_cnt > 0
+        if seen.sum() < 0.5 * n:
+            self.err_sum[:] = 0.0
+            self.err_cnt[:] = 0.0
+            return
+        self.ilc_lap += 1
+        e = np.where(seen, self.err_sum / np.maximum(self.err_cnt, 1), 0.0)
+        e = self.circ_smooth(e, 3)
+
+        # 1. shift the line against the error, inside the corridor
+        self.offset = self.circ_smooth(
+            self.offset - self.ilc_gain * e, 2)
+        self.offset = np.clip(self.offset, -self.shift_limit,
+                              self.shift_limit)
+        self.points = self.base_points + self.offset[:, None] * self.normals
+
+        # 2. slow down before corners that were missed, recover elsewhere
+        factor = np.ones(n)
+        missed = np.where(np.abs(e) > 0.12)[0]
+        for i in missed:
+            for j in range(16):
+                factor[(i - j) % n] = 0.92
+        # fix_lap1: never more than 25 % below the base plan.
+        self.track_speed = np.maximum(
+            np.maximum(0.4, 0.75 * self.base_speed),
+            self.track_speed * factor)
+        clean = (np.abs(e) < 0.05) & (factor >= 1.0)
+        self.track_speed = np.where(
+            clean,
+            np.minimum(self.base_speed, self.track_speed * 1.02),
+            self.track_speed)
+
+        worst = int(np.argmax(np.abs(e)))
+        self.get_logger().warn(
+            f'LAP LEARNED #{self.ilc_lap}: mean_err={np.mean(np.abs(e)):.3f} m '
+            f'max_err={abs(e[worst]):.3f} m at point {worst} | '
+            f'slowed {len(missed)} pts | '
+            f'max_shift={np.max(np.abs(self.offset)):.2f} m')
+
+        # 3. save for inspection
+        try:
+            out = self.track_file.parent / 'learned_track_iter.csv'
+            with open(out, 'w', newline='') as f:
+                w = csv.writer(f)
+                w.writerow(['index', 'x', 'y', 'offset', 'error',
+                            'target_speed'])
+                for i in range(n):
+                    w.writerow([i, f'{self.points[i, 0]:.4f}',
+                                f'{self.points[i, 1]:.4f}',
+                                f'{self.offset[i]:.4f}', f'{e[i]:.4f}',
+                                f'{self.track_speed[i]:.3f}'])
+        except Exception as ex:
+            self.get_logger().warn(f'Could not save learned line: {ex}')
+
+        self.err_sum[:] = 0.0
+        self.err_cnt[:] = 0.0
+
+    def try_load(self):
+
+        try:
+            if (
+                self.track_file.exists() and
+                self.track_file.stat().st_size > 50
+            ):
+                (
+                    self.points,
+                    self.track_speed
+                ) = self.load_track(
+                    self.track_file
+                )
+                self.number_of_points = len(self.points)
+                self.last_nearest_index = None
+                self.ilc_init()
+                self.get_logger().warn(
+                    f'LEARNED TRACK LOADED: '
+                    f'{self.number_of_points} waypoints'
+                )
+        except Exception as e:
+            self.points = None
+            self.get_logger().error(f'Track load failed: {e}')
+
+        return self.points is not None
+
     def pose_callback(
         self,
         msg
     ):
+
+        if self.points is None and not self.try_load():
+            return
 
         x = float(
             msg.pose.pose.position.x
@@ -439,9 +583,39 @@ class TrajectoryFollower(Node):
             msg.pose.pose.orientation
         )
 
+        # predict_time: steer for where the car will be.
+        ax, ay = x, y
+        if self.v_meas > 0.3:
+            tp = self.predict_time
+            yr = self.v_meas * math.tan(self.last_steer) / self.wheelbase
+            ym = yaw + 0.5 * yr * tp
+            x += self.v_meas * tp * math.cos(ym)
+            y += self.v_meas * tp * math.sin(ym)
+            yaw += yr * tp
+
         nearest = self.find_nearest(
             x,
             y
+        )
+
+        # Speed-adaptive lookahead (adaptive_lookahead):
+        # short in slow corners, up to the parameter on straights.
+        self.ilc_record(nearest, ax, ay)
+
+        # turn_in_v2: lookahead from the faster of plan and real speed.
+        t_now = self.get_clock().now().nanoseconds / 1e9
+        self.pose_hist.append((t_now, ax, ay))
+        while (len(self.pose_hist) > 2 and
+               t_now - self.pose_hist[1][0] >= 0.3):
+            self.pose_hist.popleft()
+        t0, x0, y0 = self.pose_hist[0]
+        if t_now - t0 > 0.15:
+            self.v_meas = math.hypot(ax - x0, ay - y0) / (t_now - t0)
+        v_here = max(float(self.track_speed[nearest]), self.v_meas)
+        # lookahead_v3: longer at speed (stops weaving above 3 m/s).
+        self.active_lookahead = max(
+            0.70,
+            min(self.lookahead, 0.50 + 0.50 * v_here)
         )
 
         target_index = self.find_target(
@@ -459,10 +633,13 @@ class TrajectoryFollower(Node):
             target
         )
 
-        target_speed = float(
-            self.track_speed[
-                target_index
-            ]
+        target_speed = min(
+            float(
+                self.track_speed[
+                    target_index
+                ]
+            ),
+            self.max_speed
         )
 
         # ------------------------------------------
@@ -471,6 +648,7 @@ class TrajectoryFollower(Node):
         # ------------------------------------------
 
         steering_msg = Float64()
+        self.last_steer = steering
         steering_msg.data = steering
 
         self.steering_pub.publish(

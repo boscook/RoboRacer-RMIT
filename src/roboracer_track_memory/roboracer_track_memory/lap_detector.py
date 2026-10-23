@@ -22,13 +22,13 @@ class LapDetector(Node):
         self.leave_start_distance = 1.50
 
         # Return within this distance of starting position.
-        self.finish_distance = 0.60
+        self.finish_distance = 1.00
 
         # Heading must approximately match starting heading.
-        self.finish_heading_tolerance = math.radians(35.0)
+        self.finish_heading_tolerance = math.radians(75.0)
 
         # Prevent tiny loops / accidental lap detection.
-        self.minimum_lap_distance = 5.0
+        self.minimum_lap_distance = 20.0
 
         # ==================================================
         # STATE
@@ -184,6 +184,13 @@ class LapDetector(Node):
         # ----------------------------------------------
         # Lap completion
         # ----------------------------------------------
+
+        if self.left_start_area and start_distance < 2.5:
+            self.get_logger().info(
+                f'LAPDBG dist={start_distance:.2f} '
+                f'head={math.degrees(abs(self.normalize_angle(yaw - self.start_yaw))):.0f} '
+                f'lapd={self.lap_distance:.1f}',
+                throttle_duration_sec=0.5)
 
         if not self.left_start_area:
             return

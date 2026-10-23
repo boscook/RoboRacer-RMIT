@@ -28,7 +28,7 @@ class TrackDetector(Node):
 
         # Keep our original more permissive threshold initially.
         # Do NOT copy their 1.5 m threshold until track testing.
-        self.clearance_threshold = 0.70
+        self.clearance_threshold = 0.40
 
         self.minimum_gap_angle = math.radians(12.0)
 
@@ -44,10 +44,10 @@ class TrackDetector(Node):
 
         # If something occupies the projected car corridor
         # within this distance, mark it as blocked.
-        self.corridor_check_distance = 1.50
+        self.corridor_check_distance = 0.80
 
         # Obstacle inflation.
-        self.bubble_radius = 0.45
+        self.bubble_radius = 0.20
 
         # Minimum-filter window:
         # similar idea to their +/-5 beam min filter.
