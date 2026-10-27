@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Single-file RoboRacer simulation benchmark downloads, genuine recorded track maps and measured clean-lap evidence.">
+  <title>Simulator Benchmark Downloads · RoboRacer RMIT</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .map{display:block;width:100%;height:auto;background:white;border-radius:12px}
+    figure{margin:24px 0}figcaption{color:var(--muted);font-size:.9rem;margin-top:10px}
+    .metric{font-size:clamp(2.8rem,8vw,5rem);line-height:1.1;font-weight:800;margin:.3em 0;color:var(--accent)}
+    .muted{color:var(--muted)}.downloads{display:flex;gap:12px;flex-wrap:wrap;margin:24px 0}
+    table{border-collapse:collapse;width:100%}th,td{text-align:left;padding:12px;border-bottom:1px solid var(--line)}
+    a{color:var(--accent)}.table-scroll{overflow-x:auto}
+  </style>
+</head>
+<body>
+  <header class="hero">
+    <div class="wrap">
+      <p class="eyebrow">RMIT capstone · simulation-only benchmark</p>
+      <h1>One file.<br>Real measured laps.</h1>
+      <p class="lead">Latest custom launch, planning, control, adaptive tuning, timing, GUI, watchdog and STOP logic in <code>ONEFILE_RACER.py</code>. Updated 27 October 2026, including the Windows startup fix.</p>
+      <div class="actions">
+        <a class="button primary" href="downloads/ONEFILE_RACER.py" download>Download Python source</a>
+        <a class="button" href="#setup">Setup instructions</a>
+        <a class="button" href="index.html">Project home</a>
+      </div>
+    </div>
+  </header>
+  <main class="wrap">
+    <section aria-labelledby="result">
+      <h2 id="result">Historical best eligible clean full lap</h2>
+      <p class="metric">6.9607 seconds</p>
+      <p><strong>Five seconds has not been achieved.</strong> This is a recorded result from lap 149 of <code>onefile-20261027T085708Z</code>, not the current state of a live run or a guaranteed time on each restart. Its wall-time cross-check was 6.963747 seconds, with zero recorded collisions at that lap.</p>
+      <p>The preserved follow-up snapshot had 160 simulator laps, 149 eligible clean full laps and zero collisions, while still running. The session subsequently recorded collisions and ended on STOP; the earlier clean-lap evidence is retained, not a claim that the entire final session was collision-free.</p>
+      <div class="notice"><strong>Simulation only.</strong> Measured with the Windows official simulator and Linux ROS Docker, using privileged simulator pose and genuine prior track memory. Native Ubuntu GPU/UI driving and lap times remain unvalidated. This is not LiDAR-only autonomy, physical-car safety validation or an unchanged-controller comparison.</div>
+    </section>
+    <section aria-labelledby="downloads">
+      <h2 id="downloads">Latest downloads</h2>
+      <div class="downloads">
+        <a class="button primary" href="downloads/ONEFILE_RACER.py" download>ONEFILE_RACER.py</a>
+        <a class="button" href="downloads/ONEFILE_RACER.tar.gz" download>Executable Linux archive</a>
+        <a class="button" href="downloads/SHA256SUMS.txt" download>SHA-256 checksums</a>
+        <a class="button" href="downloads/benchmark-evidence.json" download>Measurement provenance</a>
+      </div>
+      <p>All custom driving logic is in one Python file. Docker, ROS/NumPy/OpenCV images, the unmodified official simulator and genuine saved map/track memory remain external dependencies. The small archive contains only the executable Python file, not those dependencies. Existing machine-specific Windows <code>.lnk</code> shortcuts are intentionally not distributed.</p>
+      <p class="muted">The measured-run source hash and current download hash are both recorded in the provenance file. The latest change fixes Windows startup when the previous simulator PID no longer exists; it does not change the driving controller.</p>
+    </section>
+    <section aria-labelledby="track-map">
+      <h2 id="track-map">Genuine recorded track map</h2>
+      <figure>
+        <a href="assets/track-map.png"><img class="map" src="assets/track-map.png" alt="Recorded occupancy-grid track map with a blue reference racing line, travel-direction arrows and a marked recorded start pose." width="2000" height="1000"></a>
+        <figcaption>Actual saved occupancy grid at 0.05 m/cell, with the reference line used by the single-file controller. The blue line is the controller reference, not an exact measured wheel trajectory. This renders prior recorded data; it is not newly generated SLAM or a surveyed circuit. Equal metric axes.</figcaption>
+      </figure>
+      <div class="downloads">
+        <a class="button" href="assets/track-map.png" download>Map with racing line</a>
+        <a class="button" href="assets/track-map-only.png" download>Map only</a>
+      </div>
+    </section>
+    <section id="setup">
+      <h2>Use with the existing simulator setup</h2>
+      <h3>Windows</h3>
+      <ol>
+        <li>Stop the old run and close its simulator before switching controllers. Do not run the older <code>RUN_CONTINUOUS.bat</code> alongside the one-file mode.</li>
+        <li>Place the latest <code>ONEFILE_RACER.py</code> in the existing Capstone project root, replacing the older copy after keeping a backup.</li>
+        <li>Use the existing Windows <strong>RoboRacer One-File Start</strong> shortcut. Use <strong>RoboRacer One-File STOP</strong> to stop. The repaired shortcuts show startup diagnostics rather than hiding errors in a minimized window.</li>
+        <li>The running launcher opens the local STOP/status dashboard at <code>http://localhost:14999</code>. That address is on your own simulator PC, not this website.</li>
+      </ol>
+      <p>The existing Windows setup requires the Ubuntu WSL distribution, Python, Docker Desktop/Linux ROS dependency image, official project Windows simulator and genuine saved track memory. Downloading this file alone does not install them or create machine-specific shortcuts.</p>
+      <h3>Native Ubuntu</h3>
+      <ol>
+        <li>Use the existing extracted <code>RoboRacer_Native_Linux</code> kit. Stop and close its old run.</li>
+        <li>Extract <code>ONEFILE_RACER.tar.gz</code> directly inside the kit, beside <code>kit-manifest.json</code>. Keep the existing images and evidence/data folders.</li>
+        <li>Right-click the executable Python file and choose <strong>Run as a Program</strong>. It creates application-menu <strong>RoboRacer One-File Start/STOP</strong> entries and starts the new mode.</li>
+      </ol>
+      <p>Native x86_64 Linux, Docker permission, X11/Xwayland authorization and hardware Vulkan are required. Missing hardware Vulkan fails closed rather than silently using Windows or software rendering. Native GPU/UI driving must be validated on the target PC.</p>
+    </section>
+    <section aria-labelledby="policy">
+      <h2 id="policy">Timing, recovery and limits</h2>
+      <ul>
+        <li><strong>Crash-triggered stopping is off by default.</strong> Collisions are recorded; impacted laps are ineligible, speed backs off and driving continues. A collision-induced stationary stall may request an official reset.</li>
+        <li><strong>Proximity and predictive stopping-speed governors are bypassed.</strong> Explicit STOP, stale-data checks, host-liveness lease and an independent heartbeat watchdog remain active. These do not guarantee collision avoidance.</li>
+        <li>Eligible full laps require actual simulator finish/time events, a previous finish, sufficient measured travel/coverage and wall-time agreement. Warmup, collision, teleport and flagged tuning-transition laps are rejected.</li>
+        <li>Clean full laps from a session that contains another collision are individual-clean-lap results, not an all-clean-session claim.</li>
+        <li>No simulator clock, circuit, lap-counter or vehicle-physics changes were used. Adaptive tuning tracks the fastest observed eligible lap; it does not prove a global optimum.</li>
+        <li>STOP/fault termination does not blindly rearm. Never use this direct-actuator benchmark on a physical vehicle.</li>
+      </ul>
+      <p><a href="https://github.com/boscook/RoboRacer-RMIT/blob/main/docs/downloads/ONEFILE_RACER.py">Review the source on GitHub</a> · <a href="downloads/benchmark-evidence.json">Review exact lap evidence and artifact hashes</a></p>
+    </section>
+  </main>
+  <footer><div class="wrap">RoboRacer RMIT · Simulation benchmark downloads · Existing physical project preserved separately</div></footer>
+</body>
+</html>

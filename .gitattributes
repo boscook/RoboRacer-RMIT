@@ -1,0 +1,2 @@
+# Public download checksums describe exact bytes, including on Windows checkouts.
+docs/downloads/** -text

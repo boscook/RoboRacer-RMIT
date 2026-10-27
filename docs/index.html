@@ -14,13 +14,25 @@
       <h1>RoboRacer Autonomous</h1>
       <p class="lead">Real-time LiDAR SLAM, unknown-track exploration, physical vehicle control and lap-to-lap trajectory learning on NVIDIA Jetson.</p>
       <div class="actions">
-        <a class="button primary" href="https://github.com/boscook/RoboRacer-Autonomous">View Source Code</a>
+        <a class="button primary" href="https://github.com/boscook/RoboRacer-RMIT">View Source Code</a>
+        <a class="button" href="simulator-benchmark.html">Latest Simulator Code + Track Map</a>
         <a class="button" href="#architecture">Architecture</a>
       </div>
     </div>
   </header>
 
   <main class="wrap">
+    <section aria-labelledby="simulator-release">
+      <p class="eyebrow">Simulation-only release · 27 October 2026</p>
+      <h2 id="simulator-release">Single-file simulator benchmark</h2>
+      <p>The latest custom simulator launcher, controller, planner, lap logger, adaptive tuner and watchdog are consolidated in <code>ONEFILE_RACER.py</code>. The recorded historical best eligible clean full lap is <strong>6.9607 seconds</strong>; the five-second target has not been achieved.</p>
+      <div class="notice">This is a separate simulator-pose-assisted benchmark using genuine previously recorded track memory. Crash-stop and proximity/predictive governors are disabled; explicit STOP, stale-data and liveness checks remain. It is <strong>not physical-car or LiDAR-only validation</strong>. Native Ubuntu driving remains unverified.</div>
+      <div class="actions">
+        <a class="button primary" href="simulator-benchmark.html">Downloads, map and measured evidence</a>
+        <a class="button" href="downloads/ONEFILE_RACER.py" download>Download latest Python file</a>
+      </div>
+    </section>
+
     <section>
       <h2>Project Goal</h2>
       <p>The car is designed to be placed on an unknown closed track, create a map while driving, determine the drivable corridor from live LiDAR data, complete a lap autonomously, remember the track, and improve subsequent laps.</p>
