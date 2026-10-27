@@ -20,6 +20,8 @@ Windows/WSL test: explicitly use --platform windows in the existing project.
 Live STOP dashboard: http://localhost:14999 ; or run this same file with --stop.
 Measured development here uses the Windows simulator + Linux ROS Docker.
 Native Linux GPU/UI operation and these lap times must be revalidated there.
+The default --max-speed 0 means no imposed command-speed ceiling. Cornering,
+combined grip, braking/acceleration and finite actuator commands still apply.
 """
 import argparse
 import base64
@@ -96,16 +98,22 @@ def geometry(points, window=None):
 
 def clearance_at(points, clearance, origin, resolution):
     delta = points-np.asarray(origin[:2]); c, s = math.cos(origin[2]), math.sin(origin[2])
-    x = np.rint((c*delta[:, 0]+s*delta[:, 1])/resolution-.5).astype(int)
-    y = np.rint(clearance.shape[0]-(-s*delta[:, 0]+c*delta[:, 1])/resolution-.5).astype(int)
-    valid = (x >= 0) & (y >= 0) & (x < clearance.shape[1]) & (y < clearance.shape[0])
-    values = np.zeros(len(points)); values[valid] = clearance[y[valid], x[valid]]
-    return values
+    px=(c*delta[:,0]+s*delta[:,1])/resolution-.5
+    py=clearance.shape[0]-(-s*delta[:,0]+c*delta[:,1])/resolution-.5
+    x,y=np.floor(px).astype(int),np.floor(py).astype(int)
+    valid=(x>=0)&(y>=0)&(x+1<clearance.shape[1])&(y+1<clearance.shape[0])
+    values=np.zeros(len(points));xx,yy=x[valid],y[valid];fx,fy=px[valid]-xx,py[valid]-yy
+    values[valid]=((1-fx)*(1-fy)*clearance[yy,xx]+fx*(1-fy)*clearance[yy,xx+1]
+                   +(1-fx)*fy*clearance[yy+1,xx]+fx*fy*clearance[yy+1,xx+1])
+    # Conservative half-cell diagonal allowance; interpolation does not add
+    # unobserved free space or silently treat unknown/outside cells as drivable.
+    return np.maximum(0.,values-resolution/math.sqrt(2.))
 
 
 def reference_speed(points, cap, lateral, acceleration, braking):
     curvature, heading, ds = geometry(points)
-    speeds = np.minimum(cap, np.sqrt(lateral/np.maximum(abs(curvature), .015)))
+    ceiling = math.inf if cap == 0 else cap
+    speeds = np.minimum(ceiling, np.sqrt(lateral/np.maximum(abs(curvature), .015)))
     # Exact cyclic forward/backward energy constraints, not a short local horizon.
     for _ in range(5):
         for i in range(len(points)-1, -1, -1):
@@ -121,6 +129,151 @@ def reference_speed(points, cap, lateral, acceleration, braking):
     return speeds, curvature, heading, ds
 
 
+def vehicle_speed_profile(points, args):
+    """Cyclic forward/backward traction/power/braking profile, not a lap result.
+
+    Longitudinal and lateral accelerations share a grip ellipse. Steering-rate
+    limits are geometric/actuator constraints, not an arbitrary speed cap.
+    """
+    curvature, heading, ds = geometry(points)
+    ceiling = math.inf if args.max_speed == 0 else args.max_speed
+    speed = np.minimum(ceiling, np.sqrt(args.lateral/np.maximum(abs(curvature), 1e-5)))
+    steer = np.arctan(.33*curvature/getattr(args,'steering_response_gain',1.))
+    steer_gradient = np.abs(np.roll(steer,-1)-steer)/np.maximum(ds,.001)
+    speed = np.minimum(speed,args.steering_rate/np.maximum(steer_gradient,1e-5))
+    count=len(points)
+    # Starting below the total-grip lateral ceiling leaves a finite braking
+    # reserve; the actual simulator may have different grip, recorded separately.
+    total_grip=max(args.total_grip,args.lateral*1.001)
+    for _ in range(9):
+        old=speed.copy()
+        for i in range(count-1,-1,-1):
+            j=(i+1)%count
+            lateral_used=min(total_grip,abs(curvature[j])*speed[j]**2)
+            available=args.braking*math.sqrt(max(0.,1-(lateral_used/total_grip)**2))
+            speed[i]=min(speed[i],math.sqrt(speed[j]**2+2*available*ds[i]))
+        for i in range(count):
+            j=(i+1)%count
+            lateral_used=min(total_grip,abs(curvature[i])*speed[i]**2)
+            available=args.acceleration*math.sqrt(max(0.,1-(lateral_used/total_grip)**2))
+            # Empirical motor roll-off model; never a hard straight-line cap.
+            available/=1+(speed[i]/args.motor_knee)**2
+            speed[j]=min(speed[j],math.sqrt(speed[i]**2+2*available*ds[i]))
+        if float(np.max(old-speed))<1e-5:break
+    # End-point sweeps can slightly exceed a segment's combined budget as
+    # curvature changes. Project the complete profile back inside that ellipse.
+    for _ in range(2):
+        following=np.roll(speed,-1)
+        longitudinal=(following**2-speed**2)/(2*np.maximum(ds,.001))
+        lateral_mid=(abs(curvature)*speed**2+np.roll(abs(curvature)*speed**2,-1))/2
+        mean_speed=(speed+following)/2
+        budget=np.where(longitudinal>=0,args.acceleration/(1+(mean_speed/args.motor_knee)**2),args.braking)
+        utilisation=np.sqrt((longitudinal/np.maximum(budget,.001))**2+(lateral_mid/total_grip)**2)
+        speed/=math.sqrt(max(1.,float(utilisation.max())))
+    assert np.isfinite(speed).all() and float(speed.min())>0,'Nonfinite/infeasible speed profile'
+    return speed,curvature,heading,ds
+
+
+def footprint_clearance(points, clearance, origin, resolution):
+    """Sample a 0.62 x 0.42 m inflated axle-centred footprint along the line."""
+    _,heading,_=geometry(points)
+    forward=np.column_stack((np.cos(heading),np.sin(heading)))
+    normal=np.column_stack((-np.sin(heading),np.cos(heading)))
+    offsets=[(longitudinal,lateral)for longitudinal in np.linspace(-.22,.40,14)for lateral in(-.21,.21)]
+    offsets += [(longitudinal,lateral)for longitudinal in(-.22,.40)for lateral in np.linspace(-.21,.21,10)]
+    offsets += [(longitudinal,0.)for longitudinal in np.linspace(-.22,.40,8)]
+    probes=[points+longitudinal*forward+lateral*normal for longitudinal,lateral in offsets]
+    return clearance_at(np.vstack(probes),clearance,origin,resolution).reshape(len(probes),len(points)).min(axis=0)
+
+
+def joint_racing_line(points,clearance,origin,resolution,args):
+    """Optimise estimated complete-lap time and vehicle-feasible track usage.
+
+    Smooth multi-scale moves use the actual saved free-space corridor. Every
+    accepted proposal checks the inflated vehicle, offsets, curvature and the
+    full cyclic acceleration/braking profile, rather than only local curvature.
+    """
+    original=resample(points,.12);result=original.copy()
+    tangent=np.roll(original,-3,axis=0)-np.roll(original,3,axis=0)
+    normal=np.column_stack((-tangent[:,1],tangent[:,0]))
+    normal/=np.maximum(np.linalg.norm(normal,axis=1)[:,None],1e-8)
+    def evaluate(path):
+        center=clearance_at(path,clearance,origin,resolution)
+        if float(center.min())<args.clearance:return None
+        curve,_,distance=geometry(path)
+        if float(abs(curve).max())>getattr(args,'steering_response_gain',1.)*math.tan(.50)/.33:return None
+        footprint=footprint_clearance(path,clearance,origin,resolution)
+        if float(footprint.min())<args.footprint_margin:return None
+        velocity,_,_,_=vehicle_speed_profile(path,args)
+        seconds=float(np.sum(2*distance/(velocity+np.roll(velocity,-1))))
+        gradient=(np.roll(curve,-1)-curve)/np.maximum(distance,.001)
+        smooth=getattr(args,'line_smoothness',.003)*float(np.sum(gradient*gradient*distance))
+        edge=.04*float(np.sum(np.maximum(0.,.50-center)**2*distance))
+        return seconds+smooth+edge,seconds,float(center.min()),float(footprint.min())
+    baseline=evaluate(result)
+    dense_baseline=evaluate(resample(points))
+    if baseline is None or dense_baseline is None:
+        return resample(points),dict(accepted=False,reason='baseline failed joint footprint/steering constraints')
+    dense_best=resample(points);dense_value=dense_baseline;accepted_proposals=0;rejected_dense=0
+    best=baseline;spacing=float(geometry(original)[2].mean())
+    controls=max(1,int(round(.60/spacing)))
+    for sweep in range(args.refine_sweeps):
+        check=getattr(args,'cancel_check',None)
+        if check is not None and check():raise RuntimeError('Line optimisation cancelled; no driving armed')
+        width=(1.05,.65,.38)[sweep%3];step=.10*.87**(sweep//3)
+        # Alternate sweep direction so a preceding corner is not always favoured.
+        control_indices=list(range(0,len(result),controls))
+        if sweep%2:control_indices.reverse()
+        for index in control_indices:
+            separation=np.abs(np.arange(len(result))-index)
+            separation=np.minimum(separation,len(result)-separation)*spacing
+            influence=np.exp(-.5*(separation/width)**2)
+            influence[separation>3*width]=0
+            saved=result;chosen=result;value=best
+            chosen_dense=dense_best;chosen_dense_value=dense_value
+            for sign in (-1,1):
+                candidate=saved+sign*step*normal*influence[:,None]
+                if np.linalg.norm(candidate-original,axis=1).max()>args.line_offset:continue
+                evaluated=evaluate(candidate)
+                if evaluated is None or evaluated[0]>=value[0]-1e-6:continue
+                # Inspect the actual dense line and retain feasible improvements.
+                # Strict search rejects infeasible dense moves. Compatibility
+                # search can explore them offline, but never arms such a line.
+                dense_candidate=resample(candidate)
+                verified=evaluate(dense_candidate)
+                strict=getattr(args,'line_search_validation','retain-feasible')=='strict'
+                if verified is None:
+                    rejected_dense+=1
+                    if strict:continue
+                if not strict:
+                    chosen,value=candidate,evaluated
+                if verified is not None and verified[0]<chosen_dense_value[0]-1e-6 and verified[1]<dense_baseline[1]:
+                    chosen,value=candidate,evaluated
+                    chosen_dense,chosen_dense_value=dense_candidate,verified
+                    accepted_proposals+=1
+            result,best=chosen,value
+            dense_best,dense_value=chosen_dense,chosen_dense_value
+    dense=dense_best
+    checked=dense_value
+    recovered_dense=True
+    if getattr(args,'line_search_validation','retain-feasible')=='retain-feasible':
+        final_dense=resample(result);final_value=evaluate(final_dense)
+        if final_value is not None and final_value[0]<dense_baseline[0] and final_value[1]<dense_baseline[1]:
+            dense,checked=final_dense,final_value;recovered_dense=False
+    accepted=checked is not None and dense_baseline is not None and checked[1]<dense_baseline[1] and checked[0]<dense_baseline[0]
+    if not accepted:dense=resample(points)
+    selected=evaluate(dense)
+    return dense,dict(accepted=accepted,objective='cyclic vehicle-speed-profile time + curvature-rate/edge penalties',
+        original_estimated_profile_s=dense_baseline[1] if dense_baseline else baseline[1],selected_estimated_profile_s=selected[1] if selected else None,
+        original_cost=dense_baseline[0] if dense_baseline else baseline[0],selected_cost=selected[0] if selected else None,
+        minimum_dense_footprint_clearance_m=float(footprint_clearance(dense,clearance,origin,resolution).min()),
+        dense_validation_before_arming=True,search_validation=getattr(args,'line_search_validation','retain-feasible'),
+        recovered_prior_dense_feasible_candidate=recovered_dense,
+        retained_dense_improvements=accepted_proposals,rejected_dense_proposals=rejected_dense,
+        offset_bound_m=args.line_offset,footprint_length_m=.62,footprint_width_m=.42,
+        note='All times here are planning estimates, not driven results; physical/model validation is separate.')
+
+
 def refine_for_time(points, clearance, origin, resolution, args):
     """Map-constrained local search on genuine data, never a supplied fake circuit."""
     original = resample(points, .04); result = original.copy()
@@ -129,7 +282,7 @@ def refine_for_time(points, clearance, origin, resolution, args):
     normal /= np.maximum(np.linalg.norm(normal, axis=1)[:, None], 1e-8)
     def cost(path):
         k, _, ds = geometry(path)
-        v = np.minimum(args.max_speed, np.sqrt(args.lateral/np.maximum(abs(k), .015)))
+        v = np.minimum(math.inf if args.max_speed==0 else args.max_speed, np.sqrt(args.lateral/np.maximum(abs(k), .015)))
         return float(np.sum(ds/v)+.015*np.sum(k*k*ds))
     best = initial = cost(result)
     spacing=float(np.linalg.norm(np.roll(original,-1,axis=0)-original,axis=1).mean())
@@ -184,15 +337,27 @@ def load_memory(directory, args):
     if clearance_at(smoothed,clearance,metadata['origin'],metadata['resolution']).min() >= args.clearance:
         points = smoothed
     if args.refine_sweeps:
-        points, refinement = refine_for_time(points, clearance, metadata['origin'], metadata['resolution'], args)
+        optimiser=joint_racing_line if args.line_planner=='joint' else refine_for_time
+        points, refinement = optimiser(points, clearance, metadata['origin'], metadata['resolution'], args)
     else:
         points = resample(points); refinement = dict(selected_cost=None)
     checked = clearance_at(points, clearance, metadata['origin'], metadata['resolution'])
     assert checked.min() >= .20, 'Path not clearance-valid in the actual saved map'
-    speed, curvature, heading, ds = reference_speed(points, args.max_speed, args.lateral, args.acceleration, args.braking)
+    body_clearance=footprint_clearance(points,clearance,metadata['origin'],metadata['resolution'])
+    if args.line_planner=='joint':
+        assert float(checked.min())>=args.clearance,'Final joint line failed dense centre clearance'
+        assert float(body_clearance.min())>=args.footprint_margin,'Final joint line failed dense inflated-footprint clearance'
+    if args.line_planner=='joint':
+        speed,curvature,heading,ds=vehicle_speed_profile(points,args)
+    else:
+        speed, curvature, heading, ds = reference_speed(points, args.max_speed, args.lateral, args.acceleration, args.braking)
     proof = dict(source='genuine previously recorded simulator-assisted memory, NOT online LiDAR-only learning',
                  source_path=str(path), source_sha256=original_hash, points=len(points), length_m=float(ds.sum()),
                  minimum_saved_map_clearance_m=float(checked.min()), refinement=refinement,
+                 minimum_dense_inflated_footprint_clearance_m=float(body_clearance.min()),
+                 line_planner=args.line_planner,imposed_command_speed_cap_mps=args.max_speed if args.max_speed else None,
+                 peak_planned_speed_mps=float(speed.max()),lateral_planning_mps2=args.lateral,
+                 steering_response_gain=getattr(args,'steering_response_gain',1.),
                  ideal_profile_s=float(np.sum(2*ds/(speed+np.roll(speed, -1)))),
                  note='Ideal profile is a planning estimate, not a driven lap time.')
     return points, speed, curvature, heading, ds, anchor, proof
@@ -204,6 +369,74 @@ def valid_lap(event, length):
             and event['coverage_fraction'] >= .80 and math.isfinite(event['simulator_seconds'])
             and event['simulator_seconds'] > 0
             and abs(event['simulator_seconds']-event['wall_seconds']) <= max(.4, .10*event['simulator_seconds']))
+
+
+def median(values):
+    values=sorted(values);count=len(values)
+    return (values[(count-1)//2]+values[count//2])/2
+
+
+def choose_pace(scale,samples,step,failed_scale,maximum,minimum_laps=3):
+    """Bracket pace using repeated actual lap medians, not a single lucky best.
+
+    Returns a proposal only; it does not arm/reset a vehicle or certify safety.
+    A noisy slower lap must not trap the search below an already observed pace.
+    """
+    complete=[(median(times[-5:]),float(key))for key,times in samples.items()if len(times)>=minimum_laps]
+    if not complete:return scale,step,failed_scale,None,None
+    best_median,best_scale=min(complete)
+    current=samples.get(round(scale,5),[])
+    if len(current)<minimum_laps:return scale,step,failed_scale,best_median,best_scale
+    if median(current[-5:])>best_median*1.025 and scale>best_scale+.003:
+        failed_scale=min(failed_scale,scale)if failed_scale is not None and failed_scale>best_scale else scale
+        step=max(.005,step*.5);proposal=best_scale
+    else:
+        proposal=scale+step
+        if failed_scale is not None and failed_scale>best_scale+.005:
+            proposal=min(proposal,(best_scale+failed_scale)/2)
+        elif failed_scale is not None:
+            failed_scale=None
+    return clip(proposal,.4,maximum),step,failed_scale,best_median,best_scale
+
+
+def export_speed_profile(output,points,speed,curvature,heading,ds):
+    distance=np.r_[0.,np.cumsum(ds[:-1])]
+    acceleration=(np.roll(speed,-1)**2-speed**2)/(2*np.maximum(ds,.001))
+    with (Path(output)/'actually_used_path.csv').open('w',newline='')as stream:
+        writer=csv.writer(stream)
+        writer.writerow(['x','y','planned_speed','path_s_m','curvature','heading','planned_acceleration'])
+        writer.writerows(zip(points[:,0],points[:,1],speed,distance,curvature,heading,acceleration))
+
+
+def trajectory_acceleration(speed,ds):
+    """Continuous spatial acceleration prior; no sampled-target differencing.
+
+    The modest cyclic filter is applied to feedforward only, not to lap clocks,
+    measured telemetry or the validated speed/clearance constraints.
+    """
+    acceleration=(np.roll(speed,-1)**2-speed**2)/(2*np.maximum(ds,.001))
+    return sum(weight*np.roll(acceleration,offset)for offset,weight in[(-2,1/9),(-1,2/9),(0,3/9),(1,2/9),(2,1/9)])
+
+
+def shape_acceleration_prior(prior,scale,speed,reference,steering,path_error,heading_error,requested,args):
+    demand=clip(float(prior)*scale**2*clip(speed/max(reference,.5),.5,1.2),-args.braking,args.acceleration)
+    if demand>0:
+        turning_demand=speed**2*abs(math.tan(steering))/.33
+        remaining=math.sqrt(max(0.,1-(turning_demand/args.total_grip)**2))
+        demand=min(demand,args.acceleration*remaining/(1+(speed/args.motor_knee)**2))
+    if path_error>.12 or abs(heading_error)>.35 or requested<-args.braking*.5:
+        demand=min(0.,requested,demand)
+    return demand
+
+
+def predict_vehicle_pose(pose,speed,yaw_rate,acceleration,delay):
+    """Predict real measured motion through command transport/steering delay."""
+    x,y,angle=pose
+    distance=max(0.,(speed+.5*acceleration*delay)*delay)
+    rotation=yaw_rate/max(speed,.5)*distance
+    gain=math.sin(rotation/2)/(rotation/2)if abs(rotation)>1e-6 else 1.
+    return (x+distance*gain*math.cos(angle+rotation/2),
+            y+distance*gain*math.sin(angle+rotation/2),wrap(angle+rotation))
 
 
 def ros_mode(args):
@@ -219,30 +452,35 @@ def ros_mode(args):
     if os.environ.get('CAPSTONE_SIM_TEST') != '1':
         raise SystemExit('CAPSTONE_SIM_TEST=1 required; this program is simulation only')
     output = Path(args.output); output.mkdir(parents=True, exist_ok=False)
+    shutil.copy2(__file__,output/'controller_source.py')
+    args.cancel_check=lambda:Path('/logs/STOP').exists() or not fresh_lease(read_json('/logs/host-heartbeat.json'),args.token)
     points, planned, curvature, heading, ds, anchor, proof = load_memory(args.memory, args)
     proof['controller_sha256']=hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
     proof['crash_stop_enabled']=args.stop_on_crash
     proof['safety_policy']='SIMULATOR_DIRECT_BENCHMARK_NO_PROXIMITY_GOVERNOR'
     atomic_json(output/'memory_provenance.json', proof)
-    with (output/'actually_used_path.csv').open('w', newline='') as stream:
-        writer = csv.writer(stream); writer.writerow(['x', 'y', 'planned_speed']); writer.writerows(zip(points[:, 0], points[:, 1], planned))
+    export_speed_profile(output,points,planned,curvature,heading,ds)
+    acceleration_prior=trajectory_acceleration(planned,ds)
     rclpy.init()
 
     class Racer(Node):
         def __init__(self):
             super().__init__('onefile_simulator_racer')
             self.pose = None; self.speed = 0.; self.yaw_rate = 0.; self.pose_time = self.scan_time = 0.
+            self.measured_acceleration=0.
             self.last_position = None; self.forward = False; self.last_motion = time.monotonic()
             self.collisions = 0; self.total_collisions = 0; self.count = 0; self.last_time = float('nan')
             self.armed = False; self.stopped = False; self.reason = 'running'; self.index = None
             self.racing_started = False
             self.steering = 0.; self.throttle = 0.; self.reference = 0.; self.integral = 0.
+            self.feedforward_acceleration=0.
             self.scale = args.scale; self.best_scale = args.scale; self.best = None
             self.started = time.monotonic(); self.last_tick = self.started; self.lap_started = self.started
             self.lap_collision = False; self.lap_teleport = False; self.lap_transition = False
             self.seen_finish = False; self.distance = 0.; self.coverage = set(); self.pending = []
             self.records = []; self.last_log = 0.; self.last_status = 0.; self.clean_since_tune = 0
             self.tune_step = .04; self.failed_scale = None
+            self.pace_samples={};self.best_median=None;self.best_median_scale=None
             self.reset_until = 0.; self.resetting = False
             self.not_fresh_since = None
             q = QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE, history=HistoryPolicy.KEEP_LAST)
@@ -265,7 +503,22 @@ def ros_mode(args):
         def on_enable(self, message):
             if not message.data:
                 self.armed = False; self.stopped = True; self.reason = 'explicit_stop'
-                self.publish(0., 0., 0.)
+                self.publish(0., self.stopping_steering(), 0.)
+
+        def stopping_steering(self):
+            # Zero propulsion immediately, but do not straighten the wheels
+            # while coasting out of a curved line: that can run into the wall.
+            # This never commands reverse/braking throttle or rearms driving.
+            if self.pose is None or time.monotonic()-self.pose_time>.25 or self.speed<.05 or not self.forward:
+                return 0.
+            x,y,angle=self.pose
+            index=int(np.argmin(np.linalg.norm(points-[x,y],axis=1)))
+            look=clip(.5+.12*self.speed,.65,1.3);travel=0.;target=index
+            while travel<look:
+                travel+=ds[target];target=(target+1)%len(points)
+            dx,dy=points[target]-[x,y]
+            steering=math.atan(.33*2*(-math.sin(angle)*dx+math.cos(angle)*dy)/max(dx*dx+dy*dy,.02))
+            return clip(steering,-.5236,.5236)
 
         def on_scan(self, message):
             values = [v for v in message.ranges if math.isfinite(v) and v > max(.08, message.range_min)]
@@ -292,6 +545,9 @@ def ros_mode(args):
             transform = anchor['world_to_map']; c, s = math.cos(transform['yaw']), math.sin(transform['yaw'])
             previous_angle=self.pose[2] if self.pose else None
             self.pose = (c*p.x-s*p.y+transform['x'], s*p.x+c*p.y+transform['y'], wrap(angle+transform['yaw']))
+            if args.motion_prediction=='arc'and .008<dt<.15:
+                measured=clip((speed-self.speed)/dt,-args.braking,args.acceleration)
+                self.measured_acceleration=.75*self.measured_acceleration+.25*measured
             self.speed = speed
             rate=wrap(self.pose[2]-previous_angle)/dt if previous_angle is not None and .008<dt<.15 else float(message.twist.twist.angular.z)
             if math.isfinite(rate): self.yaw_rate = .4*self.yaw_rate+.6*rate
@@ -306,7 +562,9 @@ def ros_mode(args):
                 self.total_collisions += value-self.collisions
                 self.lap_collision = True
                 for pending in self.pending: pending['collision'] = True
-                self.failed_scale = self.scale if self.failed_scale is None else min(self.failed_scale,self.scale)
+                observed_best=self.best_median_scale if self.best_median_scale is not None else self.best_scale
+                if self.scale>observed_best+.005:
+                    self.failed_scale=self.scale if self.failed_scale is None or self.failed_scale<=observed_best else min(self.failed_scale,self.scale)
                 self.tune_step=max(.005,self.tune_step*.5)
                 self.scale = max(.4, min(self.scale*.85, self.best_scale*.95))
                 self.clean_since_tune = 0; self.index = None
@@ -324,12 +582,14 @@ def ros_mode(args):
                 self.lap_transition = True; self.seen_finish = False; self.index = None
             if value > self.count:
                 now = time.monotonic()
+                was_warmup=not self.seen_finish
                 self.pending.append(dict(lap=value, collision=self.lap_collision, teleport=self.lap_teleport,
                     transition=self.lap_transition, seen_previous_finish=self.seen_finish,
                     distance_m=self.distance, coverage_fraction=len(self.coverage)/100,
-                    wall_seconds=now-self.lap_started, scale=self.scale, due=now+.16))
+                    wall_seconds=now-self.lap_started, scale=self.scale*(args.warmup_scale if was_warmup else 1.), due=now+.16))
                 self.lap_started = now; self.seen_finish = True
-                self.lap_collision = False; self.lap_teleport = False; self.lap_transition = False
+                self.lap_collision = False; self.lap_teleport = False
+                self.lap_transition = was_warmup and args.warmup_scale!=1.
                 self.distance = 0.; self.coverage = set()
             self.count = value
 
@@ -343,25 +603,31 @@ def ros_mode(args):
                 self.records.append(event); self.journal.write(json.dumps(event)+'\n'); self.journal.flush()
                 if event['valid_clean_full_lap']:
                     seconds = event['simulator_seconds']; self.clean_since_tune += 1
+                    key=round(event['scale'],5)
+                    self.pace_samples.setdefault(key,[]).append(seconds)
+                    self.pace_samples[key]=self.pace_samples[key][-max(9,args.tune_hold_laps):]
                     if self.best is None or seconds < self.best:
                         self.best = seconds; self.best_scale = event['scale']
                         print(f'CLEAN BEST {seconds:.4f} s; scale={event["scale"]:.3f}; collisions overall={self.total_collisions}', flush=True)
-                    if not args.fixed_scale and self.clean_since_tune >= 1:
+                    if not args.fixed_scale and self.clean_since_tune >= args.tune_hold_laps:
                         old_scale=self.scale
-                        if self.best is not None and seconds > self.best*1.03 and event['scale']>self.best_scale+.005:
-                            self.failed_scale=event['scale'] if self.failed_scale is None else min(self.failed_scale,event['scale'])
-                            self.tune_step=max(.005,self.tune_step*.5);self.scale=self.best_scale
-                        else:
-                            self.scale=min(args.maximum_scale,self.scale+self.tune_step)
-                            if self.failed_scale is not None:self.scale=min(self.scale,(self.best_scale+self.failed_scale)/2)
+                        self.scale,self.tune_step,self.failed_scale,self.best_median,self.best_median_scale=choose_pace(
+                            self.scale,self.pace_samples,self.tune_step,self.failed_scale,args.maximum_scale,args.tune_hold_laps)
                         if abs(self.scale-old_scale)>.001:self.lap_transition=True
                         self.clean_since_tune = 0
+                        atomic_json(output/'pace-learning.json',dict(policy='repeated-clean-lap medians, independent from fastest single clean lap',
+                            minimum_clean_laps=args.tune_hold_laps,samples={str(k):v for k,v in self.pace_samples.items()},
+                            selected_scale=self.scale,best_median_s=self.best_median,best_median_scale=self.best_median_scale,
+                            failed_scale=self.failed_scale,step=self.tune_step))
                 else:
                     print('INVALID/TRANSITION LAP', json.dumps(event), flush=True)
                 if args.stop_after_laps and len([r for r in self.records if r['valid_clean_full_lap']]) >= args.stop_after_laps:
                     self.stopped = True; self.armed = False; self.reason = 'requested_clean_laps_complete'
 
         def publish(self, throttle, steering, reference):
+            if not all(math.isfinite(value)for value in(throttle,steering,reference)):
+                self.stopped=True;self.armed=False;self.reason='nonfinite_command'
+                throttle=steering=reference=0.
             self.throttle_pub.publish(Float32(data=float(throttle)))
             self.steer_pub.publish(Float32(data=float(clip(steering/.5236, -1., 1.))))
             control = Control(); control.stamp = self.get_clock().now().to_msg()
@@ -381,6 +647,7 @@ def ros_mode(args):
                     self.stopped=True;self.armed=False;self.reason='host_or_sensor_timeout'
             else:self.not_fresh_since=None
             throttle = steering = reference = error = 0.; position_index = 0
+            requested_acceleration=profile_acceleration=0.
             if self.armed and fresh and not self.stopped and not self.resetting:
                 x, y, angle = self.pose
                 candidates = np.arange(len(points)) if self.index is None else (self.index+np.arange(-30, 121)) % len(points)
@@ -389,36 +656,53 @@ def ros_mode(args):
                 error = float(distances.min()); self.coverage.add(min(99, int(self.index*100/len(points))))
                 # Account for the remaining bridge/actuator delay, without
                 # replacing the real-pose error used by timing diagnostics.
-                px = x+self.speed*args.preview*math.cos(angle)
-                py = y+self.speed*args.preview*math.sin(angle)
-                pa = wrap(angle+self.yaw_rate*args.preview)
+                if args.motion_prediction=='arc':
+                    px,py,pa=predict_vehicle_pose(self.pose,self.speed,self.yaw_rate,self.measured_acceleration,args.preview)
+                else:
+                    px=x+self.speed*args.preview*math.cos(angle)
+                    py=y+self.speed*args.preview*math.sin(angle)
+                    pa=wrap(angle+self.yaw_rate*args.preview)
                 future = (self.index+np.arange(0, 51)) % len(points)
                 target = int(future[np.argmin(np.linalg.norm(points[future]-[px, py], axis=1))])
                 normal = np.array([-math.sin(heading[target]), math.cos(heading[target])])
                 cross_track = float(np.dot(points[target]-[px, py], normal))
                 feedback_curvature = (curvature[target]+args.heading_gain*wrap(heading[target]-pa)/(self.speed+1.)
                                       +args.cross_gain*cross_track/(self.speed+1.)**2)
-                desired = math.atan(.33*feedback_curvature)
+                desired = math.atan(.33*feedback_curvature/args.steering_response_gain)
                 if args.tracker == 'pursuit':
-                    look = clip(.65+.18*self.speed, .85, 1.7); target=self.index; travel=0.
+                    look=clip(args.lookahead_base+args.lookahead_speed*self.speed,args.lookahead_min,args.lookahead_max)
+                    if args.curvature_lookahead>0:
+                        look=min(look,max(args.lookahead_min,args.curvature_lookahead/(.5+math.sqrt(abs(curvature[target])))))
+                    target=target if args.pursuit_origin=='predicted' else self.index
+                    travel=0.
                     while travel < look:
                         travel += ds[target]; target=(target+1) % len(points)
                     dx, dy=points[target]-[px,py]
-                    desired=math.atan(.33*2*(-math.sin(pa)*dx+math.cos(pa)*dy)/max(dx*dx+dy*dy,.02))
+                    desired=math.atan(.33*2*(-math.sin(pa)*dx+math.cos(pa)*dy)/(max(dx*dx+dy*dy,.02)*args.steering_response_gain))
                 desired = clip(desired, -.5236, .5236)
                 steering = self.steering+clip(desired-self.steering, -args.steering_rate*dt, args.steering_rate*dt)
                 preview_distance = max(.08, self.speed*args.brake_preview)
                 indices=[self.index]; travel=0.
                 while travel < preview_distance:
                     i=indices[-1]; travel+=ds[i]; indices.append((i+1) % len(points))
-                reference = float(np.min(planned[indices]))*self.scale
-                reference = min(reference, args.max_speed)
+                reference_index=indices[int(np.argmin(planned[indices]))]
+                effective_scale=self.scale*(args.warmup_scale if not self.seen_finish else 1.)
+                reference = float(planned[reference_index])*effective_scale
+                if args.max_speed>0:reference = min(reference, args.max_speed)
                 if error > .15: reference *= max(.35, 1-1.6*(error-.15))
                 requested_acceleration = clip((reference-self.reference)/dt, -args.braking, args.acceleration)
                 self.reference += requested_acceleration*dt
+                # Never let a positive map-profile prior fight the controller's
+                # explicit off-path/heading recovery or a falling speed target.
+                if args.acceleration_source=='profile':
+                    profile_acceleration=shape_acceleration_prior(acceleration_prior[reference_index],effective_scale,
+                        self.speed,reference,steering,error,wrap(heading[self.index]-angle),requested_acceleration,args)
+                    self.feedforward_acceleration+=(profile_acceleration-self.feedforward_acceleration)*min(1.,dt/.035)
+                else:self.feedforward_acceleration=requested_acceleration
                 velocity_error = self.reference-self.speed
-                self.integral = clip(self.integral+velocity_error*dt, -.3, .3)
-                throttle = .04*self.reference+args.speed_gain*velocity_error+.008*self.integral+.013*requested_acceleration
+                self.integral = clip(self.integral+velocity_error*dt, -1.5, 1.5)
+                throttle = (args.motor_feedforward*self.reference+args.speed_gain*velocity_error
+                            +args.integral_gain*self.integral+args.accel_feedforward*self.feedforward_acceleration)
                 # Negative command is braking torque ONLY while confirmed
                 # forward motion is well above a positive target, never STOP.
                 braking_allowed = (not args.no_active_brake and self.forward and reference > 1.2 and
@@ -434,11 +718,13 @@ def ros_mode(args):
             else:
                 if self.armed: self.lap_transition=True
                 self.integral=0.; self.reference=0.; self.throttle=0.
+                self.feedforward_acceleration=0.
             if self.resetting:
                 self.reset_pub.publish(Bool(data=now < self.reset_until))
                 throttle=steering=reference=0.
                 if now > self.reset_until+.4: self.resetting=False
-            if self.stopped: throttle=steering=reference=0.
+            if self.stopped:
+                throttle=reference=0.;steering=self.stopping_steering()
             self.publish(throttle,steering,reference)
             if now-self.last_log >= .05:
                 row=dict(t=now-self.started,world_map_x=self.pose[0] if self.pose else None,
@@ -447,6 +733,11 @@ def ros_mode(args):
                     collisions=self.total_collisions,simulator_laps=self.count,armed=self.armed,fresh=bool(fresh),
                     pose_age_s=now-self.pose_time,scan_age_s=now-self.scan_time,yaw_rate=self.yaw_rate,
                     forward_motion_confirmed=self.forward)
+                row.update(path_index=position_index,map_yaw=self.pose[2] if self.pose else None,
+                           unscaled_path_speed_mps=float(planned[position_index]),
+                           effective_speed_scale=self.scale*(args.warmup_scale if not self.seen_finish else 1.),
+                           profile_acceleration_mps2=profile_acceleration,target_derivative_mps2=requested_acceleration,
+                           feedforward_acceleration_mps2=self.feedforward_acceleration)
                 if self.writer is None: self.writer=csv.DictWriter(self.telemetry,fieldnames=list(row));self.writer.writeheader()
                 self.writer.writerow(row);self.telemetry.flush();self.last_log=now
             if now-self.last_status >= .5:
@@ -455,6 +746,12 @@ def ros_mode(args):
                     valid_laps=sum(r['valid_clean_full_lap'] for r in self.records),reason=self.reason,
                     crash_stop_enabled=args.stop_on_crash,simulator_pose_assisted=True,
                     safety_policy='SIMULATOR_DIRECT_BENCHMARK_NO_PROXIMITY_GOVERNOR',
+                    imposed_command_speed_cap_mps=args.max_speed if args.max_speed else None,
+                    line_planner=args.line_planner,
+                    acceleration_source=args.acceleration_source,
+                    pursuit_origin=args.pursuit_origin,
+                    warmup_active=not self.seen_finish,
+                    best_pace_median_s=self.best_median,best_pace_median_scale=self.best_median_scale,
                     five_second_target_achieved=self.best is not None and self.best < 5)
                 atomic_json(output/'status.json',status);self.status_pub.publish(String(data=json.dumps(status)));self.last_status=now
             if self.racing_started and args.run_seconds and now-self.started > args.run_seconds:
@@ -494,13 +791,15 @@ def ros_mode(args):
         racer.armed=False;racer.stopped=True
         end=time.monotonic()+5
         while rclpy.ok() and time.monotonic()<end:
-            racer.publish(0.,0.,0.);rclpy.spin_once(racer,timeout_sec=.02)
+            racer.publish(0.,racer.stopping_steering(),0.);rclpy.spin_once(racer,timeout_sec=.02)
             if racer.speed<.03 and time.monotonic()-racer.pose_time<.3 and time.monotonic()>end-4:break
         result=dict(reason=racer.reason,best_clean_lap_s=racer.best,valid_clean_laps=[r for r in racer.records if r['valid_clean_full_lap']],
                     rejected_laps=[r for r in racer.records if not r['valid_clean_full_lap']],total_collisions=racer.total_collisions,
                     stationary_verified=racer.speed<.03 and time.monotonic()-racer.pose_time<.3,
                     crash_stop_enabled=args.stop_on_crash,simulator_pose_assisted=True,
                     safety_policy='SIMULATOR_DIRECT_BENCHMARK_NO_PROXIMITY_GOVERNOR',
+                    imposed_command_speed_cap_mps=args.max_speed if args.max_speed else None,
+                    line_planner=args.line_planner,
                     five_second_target_achieved=racer.best is not None and racer.best<5)
         atomic_json(output/'result.json',result);print('RESULT',json.dumps(result),flush=True)
         guard.send_signal(signal.SIGINT) if guard.poll() is None else None
@@ -604,21 +903,31 @@ function Capture {
  $r=New-Object OneFileWindow+RECT;$client=New-Object OneFileWindow+RECT;$origin=New-Object OneFileWindow+POINT
  do {
   $current=Get-Process -Id $c.pid;$current.Refresh();$script:h=$current.MainWindowHandle
-  [OneFileWindow]::GetClientRect($h,[ref]$client)|Out-Null
-  if($client.Right-eq1280-and$client.Bottom-eq720){break}
+  $client=New-Object OneFileWindow+RECT;$r=New-Object OneFileWindow+RECT;$origin=New-Object OneFileWindow+POINT
+  $geometry=$h -and [OneFileWindow]::GetClientRect($h,[ref]$client) -and [OneFileWindow]::GetWindowRect($h,[ref]$r) -and [OneFileWindow]::ClientToScreen($h,[ref]$origin)
+  $dx=$origin.X-$r.Left;$dy=$origin.Y-$r.Top
+  $geometry=$geometry -and $client.Right -eq 1280 -and $client.Bottom -eq 720 -and $dx -ge 0 -and $dy -ge 0 -and ($dx+1280) -le ($r.Right-$r.Left) -and ($dy+720) -le ($r.Bottom-$r.Top)
+  if($geometry){break}
   Start-Sleep -Milliseconds 200
  } while ((Get-Date) -lt $deadline)
- if($client.Right-ne1280-or$client.Bottom-ne720){throw "Unverified client geometry: $($client.Right)x$($client.Bottom)"}
- [OneFileWindow]::GetWindowRect($h,[ref]$r)|Out-Null
- [OneFileWindow]::ClientToScreen($h,[ref]$origin)|Out-Null
+ if(!$geometry){throw 'Simulator window geometry is not stable/visible; no click performed'}
  $script:ox=$origin.X-$r.Left;$script:oy=$origin.Y-$r.Top
  $im=New-Object Drawing.Bitmap ($r.Right-$r.Left),($r.Bottom-$r.Top)
  $g=[Drawing.Graphics]::FromImage($im);$dc=$g.GetHdc()
  try{if(![OneFileWindow]::PrintWindow($h,$dc,2)){throw 'Window capture failed'}}finally{$g.ReleaseHdc($dc);$g.Dispose()}
  return $im
 }
-function White($im,$x,$y){$v=$im.GetPixel($script:ox+$x,$script:oy+$y);return $v.R-gt220-and$v.G-gt220-and$v.B-gt220}
-function Menu($im){return (White $im 219 113)-and(White $im 219 131)-and(White $im 32 113)}
+function White($im,$x,$y){
+ $px=$script:ox+$x;$py=$script:oy+$y
+ if($px -lt 0 -or $py -lt 0 -or $px -ge $im.Width -or $py -ge $im.Height){return $false}
+ $v=$im.GetPixel($px,$py);return $v.R-gt220-and$v.G-gt220-and$v.B-gt220
+}
+function Scene($im){
+ if(($script:ox+300) -ge $im.Width -or ($script:oy+30) -ge $im.Height -or $script:ox -lt 0 -or $script:oy -lt 0){return $false}
+ $background=$im.GetPixel($script:ox+300,$script:oy+30)
+ return ((White $im 50 30) -or (White $im 1225 30)) -and $background.R -lt 150 -and $background.G -lt 150 -and $background.B -lt 150
+}
+function Menu($im){return (Scene $im)-and(White $im 219 113)-and(White $im 219 131)-and(White $im 32 113)}
 function Click($x,$y){
  [OneFileWindow]::SetForegroundWindow($h)|Out-Null
  $point=New-Object OneFileWindow+POINT;$point.X=$x;$point.Y=$y
@@ -632,7 +941,7 @@ function Click($x,$y){
  Start-Sleep -Milliseconds 80
  [OneFileWindow]::mouse_event(4,0,0,0,[UIntPtr]::Zero)
 }
-do{$im=Capture;$ready=White $im 50 30;if($ready){break};$im.Dispose();Start-Sleep -Milliseconds 300}while((Get-Date)-lt$deadline)
+do{$im=Capture;$ready=Scene $im;if($ready){break};$im.Dispose();Start-Sleep -Milliseconds 300}while((Get-Date)-lt$deadline)
 if(!$ready){throw 'Scene not ready; no click performed'}
 $im.Save($c.screenshot+'.before.png')
 if(!(Menu $im)){$im.Dispose();Click 50 30;Start-Sleep -Milliseconds 300;$im=Capture}
@@ -670,7 +979,8 @@ def native_gui_connect(args):
         assert len(raw.data)==1280*720*4
         return Image.frombytes('RGB',(1280,720),raw.data,'raw','BGRX')
     def white(im,x,y):return min(im.getpixel((x,y)))>220
-    def menu(im):return all(white(im,x,y)for x,y in[(219,113),(219,131),(32,113)])
+    def scene(im):return (white(im,50,30)or white(im,1225,30))and max(im.getpixel((300,30)))<150
+    def menu(im):return scene(im)and all(white(im,x,y)for x,y in[(219,113),(219,131),(32,113)])
     def click(x,y):
         assert window.grab_pointer(False,X.ButtonPressMask|X.ButtonReleaseMask|X.PointerMotionMask,X.GrabModeAsync,X.GrabModeAsync,window,X.NONE,X.CurrentTime)==X.GrabSuccess
         try:
@@ -681,8 +991,8 @@ def native_gui_connect(args):
         crop=crop.resize((crop.width*3,crop.height*3));data=io.BytesIO();crop.save(data,format='PNG')
         return command(['tesseract','stdin','stdout','--psm','7'],input=data.getvalue(),capture_output=True).stdout.decode(errors='replace').lower()
     image=capture()
-    while not white(image,50,30)and time.monotonic()<deadline:time.sleep(.2);image=capture()
-    assert white(image,50,30),'Scene not ready'
+    while not scene(image)and time.monotonic()<deadline:time.sleep(.2);image=capture()
+    assert scene(image),'Scene not ready'
     if not menu(image):click(50,30);time.sleep(.3);image=capture()
     assert menu(image),'Unverified connection fields'
     connection=label(image,(75,245,305,305))
@@ -853,8 +1163,17 @@ exit 0
                '--output','/logs/drive','--token',token]
         for name in('max_speed','lateral','acceleration','braking','scale','maximum_scale','brake_cap','preview','brake_preview',
                     'heading_gain','cross_gain','speed_gain','steering_rate','throttle_rate','refine_sweeps','line_offset',
-                    'clearance','run_seconds','stop_after_laps','tracker'):
+                    'clearance','run_seconds','stop_after_laps','tracker','line_planner','total_grip','motor_knee','footprint_margin','line_smoothness','line_search_validation'):
             drive += ['--'+name.replace('_','-'),str(getattr(args,name))]
+        drive+=['--tune-hold-laps',str(args.tune_hold_laps)]
+        drive+=['--acceleration-source',args.acceleration_source]
+        drive+=['--warmup-scale',str(args.warmup_scale)]
+        drive+=['--pursuit-origin',args.pursuit_origin]
+        drive+=['--steering-response-gain',str(args.steering_response_gain)]
+        drive+=['--motion-prediction',args.motion_prediction]
+        for name in('lookahead_base','lookahead_speed','lookahead_min','lookahead_max','curvature_lookahead',
+                    'motor_feedforward','accel_feedforward','integral_gain'):
+            drive+=['--'+name.replace('_','-'),str(getattr(args,name))]
         for name in('fixed_scale','stop_on_crash','no_active_brake'):
             if getattr(args,name):drive.append('--'+name.replace('_','-'))
         log=(session/'controller.log').open('w')
@@ -869,6 +1188,22 @@ exit 0
                     except subprocess.TimeoutExpired:process.terminate()
                 break
         result=read_json(session/'drive/result.json')
+        if result is not None and not result.get('stationary_verified'):
+            # Never leave an unverified rolling vehicle merely because the
+            # controller process ended. Close only this launcher's simulator.
+            if args.platform=='windows'and windows_pid:
+                current=read_json(state_path)or{}
+                ps(r'''
+$ErrorActionPreference='Stop'
+$p=Get-Process | Where-Object { $_.Id -eq $c.pid -and $_.Path -eq $c.exe }
+if($p){$p.CloseMainWindow()|Out-Null;if(!$p.WaitForExit(2000)){Stop-Process -Id $p.Id -Force}}
+exit 0
+''',dict(pid=windows_pid,exe=current.get('windows_exe','')))
+            elif args.platform=='native'and owned(sim):
+                command(['docker','stop','--time','3',sim])
+            atomic_json(session/'unverified-stop-simulator-closure.json',dict(
+                reason='stationary telemetry not verified after zero-propulsion stop',
+                result_remains_unverified=True,simulator_closure_requested=True))
         print(json.dumps(dict(output=str(session),result=result),indent=2),flush=True)
         if process.returncode:raise RuntimeError('Controller exited; inspect '+str(session/'controller.log'))
     finally:
@@ -905,7 +1240,44 @@ def self_test():
     assert fresh_lease(dict(run_id='test',updated_unix_s=99.8),'test',now=100)
     for value in (None,{},dict(run_id='other',updated_unix_s=100),dict(run_id='test',updated_unix_s=90),dict(run_id='test',updated_unix_s=float('nan'))):
         assert not fresh_lease(value,'test',now=100)
+    assert choose_pace(.95,{.95:[6.]},.04,None,1.3)[0]==.95
+    # A single lucky fastest lap does not outweigh a repeated slower median.
+    selected=choose_pace(1.,{.95:[6.1,6.2,6.15],1.:[5.7,6.7,6.8]},.04,None,1.3)
+    assert selected[0]==.95 and abs(selected[3]-6.15)<1e-6
+    selected=choose_pace(.975,{.975:[5.9,6.,5.95]},.02,.90,1.3)
+    assert selected[0]>.975 and selected[2] is None,'Stale failure bracket trapped the observed good pace'
+    parameters=argparse.Namespace(acceleration=9.,braking=12.,total_grip=12.,motor_knee=7.)
+    assert shape_acceleration_prior(3.,1.,4.,4.,0.,0.,0.,0.,parameters)>0
+    assert shape_acceleration_prior(3.,1.,4.,4.,0.,.3,0.,-8.,parameters)<=-8.
+    assert shape_acceleration_prior(3.,1.,4.,4.,0.,0.,0.,-9.,parameters)<=-9.
+    assert shape_acceleration_prior(3.,1.,8.,8.,.5,0.,0.,0.,parameters)<=0
+    predicted=predict_vehicle_pose((0.,0.,0.),4.,0.,0.,.1)
+    assert abs(predicted[0]-.4)<1e-9 and abs(predicted[1])<1e-9
+    predicted=predict_vehicle_pose((0.,0.,0.),4.,2.,0.,.1)
+    assert abs(predicted[0]-2*math.sin(.2))<1e-9 and abs(predicted[1]-2*(1-math.cos(.2)))<1e-9
     print('PASS: collision/teleport/transition/warmup/shortcut/invalid-clock laps rejected; stale/corrupt/wrong-owner leases rejected. Synthetic unit fixtures only. No Docker, simulator or driving started.')
+
+
+def planner_self_test():
+    global np
+    import numpy as np
+    parameters=argparse.Namespace(max_speed=0.,lateral=12.,total_grip=14.,acceleration=12.,braking=16.,steering_rate=8.,motor_knee=7.)
+    angle=np.arange(240)*2*math.pi/240
+    circle=np.column_stack((9*np.cos(angle),9*np.sin(angle)))
+    speed,curve,heading,ds=vehicle_speed_profile(circle,parameters)
+    assert np.isfinite(speed).all() and float(speed.min())>6.,'Uncapped planner has an unintended 6 m/s ceiling'
+    assert float(np.max(speed*speed*abs(curve)))<=parameters.lateral+1e-5
+    parameters.max_speed=2.
+    capped,_,_,_=vehicle_speed_profile(circle,parameters)
+    assert float(capped.max())<=2.+1e-8
+    parameters.max_speed=0.
+    oval=np.column_stack((5*np.cos(angle),2*np.sin(angle)))
+    speed,curve,heading,ds=vehicle_speed_profile(oval,parameters)
+    acceleration=(np.roll(speed,-1)**2-speed**2)/(2*ds)
+    assert float(acceleration.max())<=parameters.acceleration+1e-5
+    assert float(acceleration.min())>=-parameters.braking-1e-5
+    assert float(np.max(speed*speed*abs(curve)))<=parameters.lateral+1e-5
+    print('PASS: uncapped/capped cyclic planning, finite speeds, lateral and acceleration/braking bounds including wrap-around. Synthetic geometry only; not track evidence.')
 
 
 def main():
@@ -917,32 +1289,70 @@ def main():
     parser.add_argument('--no-browser',action='store_true')
     parser.add_argument('--install',action='store_true')
     parser.add_argument('--self-test',action='store_true')
+    parser.add_argument('--planner-self-test',action='store_true')
+    parser.add_argument('--plan-only',action='store_true',help='Export offline planning estimates only; never launch/drive a simulator')
     parser.add_argument('--memory',type=Path);parser.add_argument('--output',type=Path)
     parser.add_argument('--token',default='onefile')
-    parser.add_argument('--max-speed',type=float,default=14.);parser.add_argument('--lateral',type=float,default=12.)
-    parser.add_argument('--acceleration',type=float,default=12.);parser.add_argument('--braking',type=float,default=16.)
-    parser.add_argument('--scale',type=float,default=.935);parser.add_argument('--maximum-scale',type=float,default=1.3)
+    parser.add_argument('--max-speed',type=float,default=0.,help='Imposed command cap in m/s; 0 disables that ceiling (simulation only)')
+    parser.add_argument('--lateral',type=float,default=10.)
+    parser.add_argument('--acceleration',type=float,default=9.);parser.add_argument('--braking',type=float,default=12.)
+    parser.add_argument('--scale',type=float,default=.95);parser.add_argument('--maximum-scale',type=float,default=1.3)
+    parser.add_argument('--warmup-scale',type=float,default=1.,help='Optional first unscored lap pace multiplier; subsequent change lap also excluded')
     parser.add_argument('--fixed-scale',action='store_true');parser.add_argument('--stop-on-crash',action='store_true')
+    parser.add_argument('--tune-hold-laps',type=int,default=3,help='Eligible clean laps held at a pace before median-based tuning')
     parser.add_argument('--no-active-brake',action='store_true');parser.add_argument('--brake-cap',type=float,default=.35)
-    parser.add_argument('--preview',type=float,default=.04);parser.add_argument('--brake-preview',type=float,default=.04)
+    parser.add_argument('--preview',type=float,default=.04);parser.add_argument('--brake-preview',type=float,default=.10)
     parser.add_argument('--heading-gain',type=float,default=8.);parser.add_argument('--cross-gain',type=float,default=12.)
-    parser.add_argument('--speed-gain',type=float,default=.12);parser.add_argument('--steering-rate',type=float,default=8.)
+    parser.add_argument('--speed-gain',type=float,default=.18);parser.add_argument('--steering-rate',type=float,default=8.)
     parser.add_argument('--throttle-rate',type=float,default=3.)
+    parser.add_argument('--lookahead-base',type=float,default=.55);parser.add_argument('--lookahead-speed',type=float,default=.14)
+    parser.add_argument('--lookahead-min',type=float,default=.65);parser.add_argument('--lookahead-max',type=float,default=1.55)
+    parser.add_argument('--curvature-lookahead',type=float,default=1.)
+    parser.add_argument('--motor-feedforward',type=float,default=.04)
+    parser.add_argument('--accel-feedforward',type=float,default=.035)
+    parser.add_argument('--acceleration-source',choices=['command','profile'],default='command')
+    parser.add_argument('--pursuit-origin',choices=['measured','predicted'],default='measured')
+    parser.add_argument('--motion-prediction',choices=['linear','arc'],default='linear')
+    parser.add_argument('--steering-response-gain',type=float,default=1.,help='Measured curvature response divided by commanded bicycle curvature')
+    parser.add_argument('--integral-gain',type=float,default=.04)
     parser.add_argument('--tracker',choices=['feedback','pursuit'],default='pursuit')
-    parser.add_argument('--refine-sweeps',type=int,default=4);parser.add_argument('--line-offset',type=float,default=.25)
-    parser.add_argument('--clearance',type=float,default=.30)
+    parser.add_argument('--refine-sweeps',type=int,default=9);parser.add_argument('--line-offset',type=float,default=.65)
+    parser.add_argument('--clearance',type=float,default=.34)
+    parser.add_argument('--line-planner',choices=['joint','legacy'],default='joint')
+    parser.add_argument('--line-smoothness',type=float,default=.003,help='Curvature-rate penalty in joint line optimisation')
+    parser.add_argument('--line-search-validation',choices=['retain-feasible','strict'],default='retain-feasible',help='Preserve the original validated final search result, retaining a dense feasible candidate if it fails; strict rejects each infeasible dense search move')
+    parser.add_argument('--total-grip',type=float,default=12.)
+    parser.add_argument('--motor-knee',type=float,default=7.)
+    parser.add_argument('--footprint-margin',type=float,default=.06)
     parser.add_argument('--run-seconds',type=float,default=0);parser.add_argument('--stop-after-laps',type=int,default=0)
     parser.add_argument('--platform',choices=['windows','native'],default='native')
     parser.add_argument('--root',type=Path,default=Path(__file__).resolve().parent)
     parser.add_argument('--stop',action='store_true')
     args=parser.parse_args()
     if args.self_test:return self_test()
+    if args.planner_self_test:return planner_self_test()
     if args.install:return install_shortcuts(args)
-    for key in ('max_speed','lateral','acceleration','braking','scale','maximum_scale','preview','brake_preview','heading_gain','cross_gain','speed_gain','steering_rate','throttle_rate','brake_cap','line_offset','clearance','run_seconds'):
+    for key in ('max_speed','lateral','acceleration','braking','scale','maximum_scale','preview','brake_preview','heading_gain','cross_gain','speed_gain','steering_rate','throttle_rate','brake_cap','line_offset','clearance','run_seconds','total_grip','motor_knee','footprint_margin','lookahead_base','lookahead_speed','lookahead_min','lookahead_max','curvature_lookahead','motor_feedforward','accel_feedforward','integral_gain'):
         value=getattr(args,key)
         if not math.isfinite(value) or value<0:parser.error('Invalid '+key)
-    if not 0<args.max_speed<=25 or not 0<args.lateral<=40 or not 0<args.scale<=args.maximum_scale<=2:parser.error('Invalid benchmark envelope')
+    if not 0<=args.max_speed or not 0<args.lateral<=40 or not 0<args.scale<=args.maximum_scale<=2:parser.error('Invalid benchmark envelope')
     if not 0<args.acceleration<=40 or not 0<args.braking<=40 or not 0<=args.brake_cap<=1:parser.error('Invalid actuator/planner parameters')
+    if args.motor_knee<=0 or args.total_grip<args.lateral or args.refine_sweeps<0:parser.error('Invalid joint-profile model')
+    if args.tune_hold_laps<3:parser.error('Pace tuning requires at least three eligible clean laps')
+    if not math.isfinite(args.warmup_scale)or not 0<args.warmup_scale<=1:parser.error('Invalid warmup pace')
+    if not math.isfinite(args.steering_response_gain)or args.steering_response_gain<=0:parser.error('Invalid steering-response model')
+    if not math.isfinite(args.line_smoothness)or args.line_smoothness<0:parser.error('Invalid line smoothness')
+    if not 0<args.lookahead_min<=args.lookahead_max:parser.error('Invalid lookahead geometry')
+    if args.plan_only:
+        if args.memory is None or args.output is None:parser.error('--plan-only requires --memory and --output')
+        global np
+        import numpy as np
+        args.output.mkdir(parents=True,exist_ok=False)
+        points,speed,curvature,heading,ds,anchor,proof=load_memory(args.memory,args)
+        export_speed_profile(args.output,points,speed,curvature,heading,ds)
+        atomic_json(args.output/'memory_provenance.json',proof)
+        atomic_json(args.output/'planning_configuration.json',vars_to_json(args))
+        print(json.dumps(proof,indent=2));return
     if args.start_unity:
         Path('/run/onefile-unity.pid').write_text(str(os.getpid()));os.chdir('/home/autodrive_simulator')
         os.execv('./AutoDRIVE Simulator.x86_64',['./AutoDRIVE Simulator.x86_64','-force-vulkan','-screen-fullscreen','0',

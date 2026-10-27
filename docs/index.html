@@ -23,10 +23,10 @@
 
   <main class="wrap">
     <section aria-labelledby="simulator-release">
-      <p class="eyebrow">Simulation-only release · 27 October 2026</p>
+      <p class="eyebrow">Simulation-only release · Joint line and median pace tuning</p>
       <h2 id="simulator-release">Single-file simulator benchmark</h2>
-      <p>The latest custom simulator launcher, controller, planner, lap logger, adaptive tuner and watchdog are consolidated in <code>ONEFILE_RACER.py</code>. The recorded historical best eligible clean full lap is <strong>6.9607 seconds</strong>; the five-second target has not been achieved.</p>
-      <div class="notice">This is a separate simulator-pose-assisted benchmark using genuine previously recorded track memory. Crash-stop and proximity/predictive governors are disabled; explicit STOP, stale-data and liveness checks remain. It is <strong>not physical-car or LiDAR-only validation</strong>. Native Ubuntu driving remains unverified.</div>
+      <p>The latest custom simulator launcher, controller, planner, lap logger, adaptive tuner and watchdog are consolidated in <code>ONEFILE_RACER.py</code>. The historical best eligible clean full lap is <strong>5.8218 seconds</strong>; nine later bounded candidates did not beat it. The five-second target remains unachieved.</p>
+      <div class="notice">This is a separate simulator-pose-assisted benchmark using genuine previously recorded track memory, with <strong>no imposed command-speed ceiling</strong>. Physical/model constraints remain; crash-stop and proximity/predictive governors are disabled, while STOP, stale-data and liveness checks remain. It is <strong>not physical-car or LiDAR-only validation</strong>. Native Ubuntu driving remains unverified.</div>
       <div class="actions">
         <a class="button primary" href="simulator-benchmark.html">Downloads, map and measured evidence</a>
         <a class="button" href="downloads/ONEFILE_RACER.py" download>Download latest Python file</a>

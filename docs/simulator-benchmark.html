@@ -20,7 +20,7 @@
     <div class="wrap">
       <p class="eyebrow">RMIT capstone · simulation-only benchmark</p>
       <h1>One file.<br>Real measured laps.</h1>
-      <p class="lead">Latest custom launch, planning, control, adaptive tuning, timing, GUI, watchdog and STOP logic in <code>ONEFILE_RACER.py</code>. Updated 27 October 2026, including the Windows startup fix.</p>
+      <p class="lead">Latest custom launch, joint racing-line/speed planning, adaptive tuning, timing, GUI, watchdog and STOP logic in <code>ONEFILE_RACER.py</code>. Includes dense-feasible planner fallback, repeated-clean-lap median tuning and Windows startup/window guards.</p>
       <div class="actions">
         <a class="button primary" href="downloads/ONEFILE_RACER.py" download>Download Python source</a>
         <a class="button" href="#setup">Setup instructions</a>
@@ -31,9 +31,10 @@
   <main class="wrap">
     <section aria-labelledby="result">
       <h2 id="result">Historical best eligible clean full lap</h2>
-      <p class="metric">6.9607 seconds</p>
-      <p><strong>Five seconds has not been achieved.</strong> This is a recorded result from lap 149 of <code>onefile-20261027T085708Z</code>, not the current state of a live run or a guaranteed time on each restart. Its wall-time cross-check was 6.963747 seconds, with zero recorded collisions at that lap.</p>
-      <p>The preserved follow-up snapshot had 160 simulator laps, 149 eligible clean full laps and zero collisions, while still running. The session subsequently recorded collisions and ended on STOP; the earlier clean-lap evidence is retained, not a claim that the entire final session was collision-free.</p>
+      <p class="metric">5.8218 seconds</p>
+      <p><strong>Five seconds has not been achieved.</strong> This is an actual result from lap 16 of <code>onefile-20261027T132154Z</code>: simulator time 5.821800 seconds, wall-time cross-check 5.802971 seconds, travel 28.1909 m and full coverage, with zero recorded collisions at that lap. It is a historical individual-clean-lap result, not a guaranteed pace or the current state of a live run.</p>
+      <p>The saved 41-lap follow-up had 24 eligible clean full laps and one later collision, with driving continuing after backoff. Only one eligible lap in that snapshot was below six seconds. The completed session and later collisions remain recorded; this is not an entirely collision-free-session claim.</p>
+      <p><strong>No new record is claimed from the latest follow-up.</strong> Nine additional bounded candidates were slower or collided; their best eligible lap was 6.5537 s. The selected default path/profile values were verified equal to the historical 5.8218 s setup. Planner, startup and tuning robustness fixes are not proof of faster laps.</p>
       <div class="notice"><strong>Simulation only.</strong> Measured with the Windows official simulator and Linux ROS Docker, using privileged simulator pose and genuine prior track memory. Native Ubuntu GPU/UI driving and lap times remain unvalidated. This is not LiDAR-only autonomy, physical-car safety validation or an unchanged-controller comparison.</div>
     </section>
     <section aria-labelledby="downloads">
@@ -43,20 +44,53 @@
         <a class="button" href="downloads/ONEFILE_RACER.tar.gz" download>Executable Linux archive</a>
         <a class="button" href="downloads/SHA256SUMS.txt" download>SHA-256 checksums</a>
         <a class="button" href="downloads/benchmark-evidence.json" download>Measurement provenance</a>
+        <a class="button" href="downloads/FASTER_FOLLOWUP_RESULTS.md" download>Follow-up test results</a>
+        <a class="button" href="downloads/SPEED_PROFILE.csv" download>Unscaled planned profile CSV</a>
       </div>
       <p>All custom driving logic is in one Python file. Docker, ROS/NumPy/OpenCV images, the unmodified official simulator and genuine saved map/track memory remain external dependencies. The small archive contains only the executable Python file, not those dependencies. Existing machine-specific Windows <code>.lnk</code> shortcuts are intentionally not distributed.</p>
-      <p class="muted">The measured-run source hash and current download hash are both recorded in the provenance file. The latest change fixes Windows startup when the previous simulator PID no longer exists; it does not change the driving controller.</p>
+      <p class="muted">The measured-run source hash and current download hash are both recorded in the provenance file. The implementation has changed since that measured lap; only the default exported path/profile values are regression-checked equal. Do not treat the whole controller as unchanged or the current code as a new record validation.</p>
+    </section>
+    <section aria-labelledby="release-changes">
+      <h2 id="release-changes">What is selected in this release?</h2>
+      <ul>
+        <li><strong>No imposed command-speed ceiling:</strong> <code>--max-speed 0</code> is the default. Curvature, modelled grip, motor acceleration/braking, finite commands and actuator saturation still constrain driving.</li>
+        <li>Joint planning uses the genuine saved free-space corridor, a sampled inflated footprint, cyclic acceleration/braking constraints and a combined grip model. A valid original final line is preserved; if the last coarse candidate fails dense validation, a prior densely feasible improvement is retained rather than discarding the whole search. No selected line bypasses the final checks.</li>
+        <li>Continuous pacing holds at least three eligible clean laps before using recent lap medians to propose a change. Fastest individual clean laps remain separately recorded; the search does not prove a global optimum.</li>
+        <li>The proven command-derived acceleration feedforward, 0.04 s preview and measured-origin linear pursuit remain defaults. Spatial feedforward, larger steering-delay compensation and other slower tested variants are explicit experimental options, not promoted as faster defaults.</li>
+        <li>Windows guards handle missing old process IDs, blank/hover-dimmed UI frames and transient window bounds. STOP commands zero propulsion while retaining curve-following steering during coasting; unverified stopping closes only the owned simulator.</li>
+      </ul>
     </section>
     <section aria-labelledby="track-map">
       <h2 id="track-map">Genuine recorded track map</h2>
       <figure>
-        <a href="assets/track-map.png"><img class="map" src="assets/track-map.png" alt="Recorded occupancy-grid track map with a blue reference racing line, travel-direction arrows and a marked recorded start pose." width="2000" height="1000"></a>
-        <figcaption>Actual saved occupancy grid at 0.05 m/cell, with the reference line used by the single-file controller. The blue line is the controller reference, not an exact measured wheel trajectory. This renders prior recorded data; it is not newly generated SLAM or a surveyed circuit. Equal metric axes.</figcaption>
+        <a href="assets/joint-racing-line.png"><img class="map" src="assets/joint-racing-line.png" alt="Genuine saved occupancy map showing the previous reference, the 28.18 m jointly optimised line and the actual earlier 5.9258-second driven trajectory."></a>
+        <figcaption>Actual saved occupancy grid at 0.05 m/cell. The blue reference is approximately 28.18 m versus the earlier 30.91 m reference on the same unchanged track. The orange driven overlay belongs to the earlier 5.9258-second lap, not the newer record. This renders genuine prior data, not new SLAM or a surveyed circuit. Equal metric axes.</figcaption>
       </figure>
       <div class="downloads">
-        <a class="button" href="assets/track-map.png" download>Map with racing line</a>
+        <a class="button" href="assets/joint-racing-line.png" download>Joint racing-line map</a>
         <a class="button" href="assets/track-map-only.png" download>Map only</a>
+        <a class="button" href="assets/track-map.png" download>Earlier reference map</a>
       </div>
+    </section>
+    <section aria-labelledby="speed-profile">
+      <h2 id="speed-profile">Actual speed profile: 5.8218-second lap</h2>
+      <figure>
+        <a href="assets/speed-profile-5p8218s.png"><img class="map" src="assets/speed-profile-5p8218s.png" alt="Actual command reference and measured simulator speeds over reference arc length during the clean 5.8218-second lap, alongside the unscaled model plan and curvature."></a>
+        <figcaption>Actual logged samples from lap 16 of the historical record run. The unscaled planning curve is a model estimate, not a driven lap time. Actual peak speed was approximately 8.253 m/s, so this result is not a 6 m/s-limited benchmark.</figcaption>
+      </figure>
+      <div class="downloads">
+        <a class="button" href="assets/speed-profile-5p8218s.png" download>Measured speed-profile plot</a>
+        <a class="button" href="downloads/SPEED_PROFILE.csv" download>Unscaled reference/profile CSV</a>
+      </div>
+    </section>
+    <section aria-labelledby="follow-up">
+      <h2 id="follow-up">Slower and failed trials are retained</h2>
+      <figure>
+        <a href="assets/faster-followup-attempts.png"><img class="map" src="assets/faster-followup-attempts.png" alt="Nine further speed candidates compared against the historical 5.8218-second best; none of the bounded candidates beat the record."></a>
+        <figcaption>Nine bounded candidates, four eligible clean full laps each, and five aggregate session collisions. Collision-affected laps remain ineligible; some plotted clean laps followed slower recovery/backoff. All completed trials verified stationary stopping. A separate preparation-only window failure has no lap time.</figcaption>
+      </figure>
+      <p>The newer continuous validation snapshot had 18 simulator laps, 13 eligible clean full laps, zero collisions and a session best of 6.0287 s while still running with median-based tuning. It is a historical observation, not a current live feed or an endurance guarantee. See the downloadable evidence and follow-up results for exact scope.</p>
+      <p><a href="downloads/FASTER_FOLLOWUP_RESULTS.md" download>Download the full follow-up explanation</a> · <a href="releases/2026-10-27-windows-startup-fix/">Earlier 6.9607-second release archive</a></p>
     </section>
     <section id="setup">
       <h2>Use with the existing simulator setup</h2>
@@ -83,7 +117,7 @@
         <li><strong>Proximity and predictive stopping-speed governors are bypassed.</strong> Explicit STOP, stale-data checks, host-liveness lease and an independent heartbeat watchdog remain active. These do not guarantee collision avoidance.</li>
         <li>Eligible full laps require actual simulator finish/time events, a previous finish, sufficient measured travel/coverage and wall-time agreement. Warmup, collision, teleport and flagged tuning-transition laps are rejected.</li>
         <li>Clean full laps from a session that contains another collision are individual-clean-lap results, not an all-clean-session claim.</li>
-        <li>No simulator clock, circuit, lap-counter or vehicle-physics changes were used. Adaptive tuning tracks the fastest observed eligible lap; it does not prove a global optimum.</li>
+        <li>No simulator clock, circuit, lap-counter or vehicle-physics changes were used. Repeated clean-lap medians guide pacing; the fastest individually eligible lap is tracked separately. Neither establishes a global optimum or guaranteed improvement.</li>
         <li>STOP/fault termination does not blindly rearm. Never use this direct-actuator benchmark on a physical vehicle.</li>
       </ul>
       <p><a href="https://github.com/boscook/RoboRacer-RMIT/blob/main/docs/downloads/ONEFILE_RACER.py">Review the source on GitHub</a> · <a href="downloads/benchmark-evidence.json">Review exact lap evidence and artifact hashes</a></p>

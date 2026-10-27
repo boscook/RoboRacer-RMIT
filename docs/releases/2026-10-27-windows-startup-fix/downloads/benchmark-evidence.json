@@ -1,0 +1,76 @@
+{
+  "prepared_utc": "2026-10-27T12:32:27.902298+00:00",
+  "release": "2026-10-27-windows-startup-fix",
+  "simulation_only": true,
+  "github_pages_serves_downloads_not_live_simulator": true,
+  "measured_platform": "Official Windows IROS 2026 practice simulator + Linux ROS Docker",
+  "native_linux_gpu_ui_and_lap_times_verified": false,
+  "target_seconds": 5,
+  "target_achieved": false,
+  "run_id": "onefile-20261027T085708Z",
+  "best_lap_event": {
+    "lap": 149,
+    "collision": false,
+    "teleport": false,
+    "transition": false,
+    "seen_previous_finish": true,
+    "distance_m": 30.734296565335395,
+    "coverage_fraction": 1.0,
+    "wall_seconds": 6.963747329999933,
+    "scale": 0.9643750000000001,
+    "simulator_seconds": 6.960700035095215,
+    "valid_clean_full_lap": true,
+    "total_collisions": 0
+  },
+  "measured_controller_source_sha256": "83ebde93ede73ee3bff91d5ef283258361b635737e914210cf0acf88bccd7dc6",
+  "published_controller_source_sha256": "be46318ed0b636d54c97a023827f9555fd1eeba132ce92eeb0ea5716187a2d5b",
+  "changed_top_level_functions_since_measured_source": [
+    "launch_host"
+  ],
+  "change_note": "Only launch_host changed: Windows missing-previous-PID cleanup fix; AST checks confirm driving/planning/timing/watchdog functions unchanged. Windows shortcuts are machine-specific and not included.",
+  "final_historical_session": {
+    "reason": "explicit_stop_file",
+    "total_collisions": 4,
+    "eligible_clean_laps": 540,
+    "rejected_laps": 133,
+    "stationary_verified": true
+  },
+  "saved_followup_snapshot": {
+    "simulator_laps": 160,
+    "eligible_clean_laps": 149,
+    "total_collisions": 0,
+    "best_clean_lap_seconds": 6.960700035095215,
+    "note": "Historical ongoing snapshot only, not the final collision count."
+  },
+  "map": {
+    "source_map_run": "presentation-20261022T025027112",
+    "source_line_run": "onefile-20261027T085708Z",
+    "grid_width": 312,
+    "grid_height": 106,
+    "resolution_m": 0.05,
+    "origin": [
+      -3.97,
+      -4.49,
+      0
+    ],
+    "line_points": 773,
+    "line_length_m": 30.905389992246924,
+    "input_sha256": {
+      "actually_used_path.csv": "621272398dcd3e91d79c443e92b1ecb1e612e99ed0b12601b09e2818ed213cf9",
+      "memory_provenance.json": "4d71c5a8636e785c780b602060d431f0b9f67217e1c239f5876462b982fcfd37",
+      "benchmark_reference.json": "a239d0ccd701aa42a9991d1547201e0fdca6df9b3db88e0c5564f75f4eabf10a",
+      "map.yaml": "0854c8d34435143a4597fb49f1e12121366952b2d0f6df4ee3d56a25a5e3b77f",
+      "map.pgm": "10aac372d44bc477bf2eeb1671f94c37241d9903c2e503c51c79a1fa0eabd58f"
+    },
+    "note": "Rendered genuine prior saved occupancy grid, not a fresh SLAM run or surveyed circuit. Overlay is the actual single-file reference line, not a claim of exact driven wheel trajectory. Equal metric axes; no geometry stretching."
+  },
+  "timing_policy": "Actual simulator finish/time events with wall-time, distance and coverage cross-checks. Collision/teleport/warmup/flagged-transition laps rejected. Other clean laps remain individual-clean-lap results, not an all-clean-session claim.",
+  "safety_policy": "SIMULATOR_DIRECT_BENCHMARK_NO_PROXIMITY_GOVERNOR; crash stop disabled by default, explicit STOP/stale-data/host-liveness/heartbeat watchdog retained. Not for physical cars.",
+  "dependencies": "Existing official simulator, ROS/Docker dependency images and genuine saved track/map memory required. Native transfer archive contains one executable source file only.",
+  "artifact_sha256": {
+    "downloads/ONEFILE_RACER.py": "be46318ed0b636d54c97a023827f9555fd1eeba132ce92eeb0ea5716187a2d5b",
+    "downloads/ONEFILE_RACER.tar.gz": "6fda4007befb164b4e34cb7397c7abe1f7fe7045ab7392c318667c82ad543557",
+    "assets/track-map-only.png": "7d33b3b0075a46d77551e98ea974f2d6f22ce316ebff07a9b8bb582bf346fd7b",
+    "assets/track-map.png": "e14ee79cf61d25bf8bf58c49b073d0699fd1bcacef86a913249ca54bd5c8d28b"
+  }
+}

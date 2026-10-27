@@ -10,9 +10,13 @@ Autonomous RoboRacer project for real-time LiDAR mapping, unknown-track explorat
 - [Executable one-file Linux transfer archive](docs/downloads/ONEFILE_RACER.tar.gz)
 - [Download checksums and measurement provenance](docs/downloads/benchmark-evidence.json)
 
-The 2026-10-27 single-file simulator release includes the Windows missing-previous-process startup fix. It is **separate from the physical ROS packages below**. Its historical best eligible clean full lap is **6.9607 seconds**, not an under-five-second result or a guaranteed time on restart. Measurements used the Windows simulator with Linux ROS Docker. Native Ubuntu GPU/UI driving and lap times remain unvalidated.
+The latest single-file release includes joint line/profile planning, dense-feasible fallback retention, repeated-clean-lap median tuning, zero-propulsion coasting/STOP handling and Windows startup/window guards. It is **separate from the physical ROS packages below**. Its historical best eligible clean full lap is **5.8218 seconds**, not an under-five-second result or a guaranteed time on restart. Nine later bounded candidates did not beat that record; robustness fixes are not a new speed-record claim. Measurements used the Windows simulator with Linux ROS Docker. Native Ubuntu GPU/UI driving and lap times remain unvalidated.
 
-This mode uses privileged simulator pose, genuine prior track memory and direct actuator control. Crash-triggered stopping and proximity/predictive governors are disabled; STOP, stale-data and host-liveness checks remain. Collision/teleport/warmup/flagged-transition laps are ineligible, while other clean full laps from a session with a collision remain individual-clean-lap results. **Do not use this benchmark to control a physical car.** ROS, Docker images, official simulator and saved map/track data remain dependencies; GitHub Pages serves downloads, not a browser-based simulator.
+- [Exact follow-up results and rejected/slower attempts](docs/downloads/FASTER_FOLLOWUP_RESULTS.md)
+- [Unscaled planned line/speed-profile CSV](docs/downloads/SPEED_PROFILE.csv)
+- [Earlier 6.9607-second release and original evidence](https://boscook.github.io/RoboRacer-RMIT/releases/2026-10-27-windows-startup-fix/)
+
+This mode has **no imposed command-speed ceiling by default** (<code>--max-speed 0</code>); physical/model constraints and finite actuator commands remain. It uses privileged simulator pose, genuine prior track memory and direct actuator control. Crash-triggered stopping and proximity/predictive governors are disabled; STOP, stale-data and host-liveness checks remain. Collision/teleport/warmup/flagged-transition laps are ineligible, while other clean full laps from a session with a collision remain individual-clean-lap results. **Do not use this benchmark to control a physical car.** ROS, Docker images, official simulator and saved map/track data remain dependencies; GitHub Pages serves downloads, not a browser-based simulator.
 
 ## Project Goal
 
