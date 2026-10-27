@@ -1,0 +1,9 @@
+{
+  "created_utc": "2026-10-27T18:50:24.406008+00:00",
+  "tag": "capstone-f1tenth:humble-v1",
+  "id": "sha256:04531a0cfb66ea11294a3bc5702a4eb9a9916b88f756c9bce279d3577e333a8b",
+  "architecture": "amd64",
+  "runtime_fingerprint": "3045ba55d57e509cb9acad191960cfc68b2c588f5e2e46bac5f5e859dbc59b94",
+  "source_lock_sha256": "a1aeb5cd55e4b6cb0dd7d6f1c7db23000348fe36f7cb61ee3a7087d5e69f76a7",
+  "note": "Ordered layer/runtime fingerprint, not solely a Docker manifest ID. All physics sources are checked separately."
+}

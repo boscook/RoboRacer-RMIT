@@ -2,6 +2,29 @@
 
 Autonomous RoboRacer project for real-time LiDAR mapping, unknown-track exploration, physical vehicle control, safety supervision, lap detection, and learned trajectory following.
 
+## Separate F1TENTH simulation setup
+
+- [F1TENTH setup page and downloads](https://boscook.github.io/RoboRacer-RMIT/f1tenth/)
+- [Custom single-file F1TENTH application](docs/f1tenth/downloads/F1TENTH_RACER.py)
+- [Source-only setup, vendor sources, maps and licenses](docs/f1tenth/downloads/RoboRacer_F1TENTH_Source_eaad55f5d6a8.zip)
+- [Full offline image/setup release](https://github.com/boscook/RoboRacer-RMIT/releases/tag/f1tenth-sandbox-20261027T184947163160Z)
+- [Machine-readable validation report](docs/f1tenth/downloads/VALIDATION_REPORT.json)
+
+This **separate 2D F1TENTH Gym/ROS 2 sandbox** includes 23 supplied track datasets,
+Windows Start/Stop launchers, a local live browser view and a native Linux shortcut
+installer. The approximately 450 MB offline kit is a GitHub Release asset, not a
+large Git/Pages file. The smaller source ZIP builds its dependency image on first
+launch and needs internet. Docker/Python/browser prerequisites remain; no host ROS
+or GPU is required. Pages is a download site, not an online simulation service.
+
+All 23 maps passed data/clearance checks, while Melbourne completed a verified
+zero-collision full lap (79.790 simulated / 84.579 wall seconds) and actual STOP,
+reset/recovery and queued-start cancellation tests. Native Ubuntu on the other PC
+remains untested. This uses supplied map/line priors and actual Gym odometry, not
+fresh SLAM or LiDAR-only autonomy. **Do not compare its different track/physics with
+the AutoDRIVE 5.8218-second result, or use it on a physical car.** Upstream sources,
+hashes, GPL map license/attribution and MIT simulator/bridge licenses are retained.
+
 ## Latest simulation-only code and GitHub Pages
 
 - [Project website](https://boscook.github.io/RoboRacer-RMIT/)

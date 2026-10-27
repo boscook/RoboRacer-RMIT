@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Separate F1TENTH Gym and ROS 2 setup with 23 supplied maps, Windows Start/Stop buttons and an offline Ubuntu transfer kit.">
+  <title>F1TENTH Setup and Downloads · RoboRacer RMIT</title>
+  <link rel="stylesheet" href="../style.css">
+  <style>
+    a{color:var(--accent)}.map{display:block;width:100%;height:auto;background:white;border-radius:12px}
+    figure{margin:24px 0}figcaption,.muted{color:var(--muted)}figcaption{font-size:.9rem;margin-top:10px}
+    table{border-collapse:collapse;width:100%}th,td{text-align:left;padding:10px;border-bottom:1px solid var(--line)}
+    .table-scroll{overflow-x:auto}.downloads{display:flex;gap:12px;flex-wrap:wrap;margin:24px 0}
+    .cards{grid-template-columns:repeat(2,minmax(0,1fr))}.metric{color:var(--accent);font-size:2rem;font-weight:800}
+    @media(max-width:700px){.cards{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <header class="hero"><div class="wrap">
+    <p class="eyebrow">Separate simulator · 23 supplied tracks · ROS 2</p>
+    <h1>F1TENTH.<br>Ready to run locally.</h1>
+    <p class="lead">Genuine Gym physics, the upstream ROS bridge, Windows Start/Stop controls and a labelled 2D view of actual simulation state. Sources, map attribution and validation evidence included.</p>
+    <div class="actions">
+      <a class="button primary" href="https://github.com/boscook/RoboRacer-RMIT/releases/download/f1tenth-sandbox-20261027T184947163160Z/RoboRacer_F1TENTH_20261027T184947163160Z.tar.gz">Download offline kit · 450 MB</a>
+      <a class="button" href="downloads/RoboRacer_F1TENTH_Source_eaad55f5d6a8.zip" download>Source-only setup ZIP</a>
+      <a class="button" href="../index.html">Project home</a>
+    </div>
+  </div></header>
+  <main class="wrap">
+    <section>
+      <h2>What runs where?</h2>
+      <div class="notice"><strong>This website hosts downloads and instructions.</strong> It cannot run Docker or ROS on GitHub Pages. After local installation, the launcher opens <code>http://localhost:15080</code> on your own PC. That local app shows actual simulated car/ROS state, not a prerecorded animation or a remote vehicle.</div>
+      <p>The setup is independent of the existing AutoDRIVE benchmark and the physical-car ROS packages. It uses a private Docker network and ROS domain 77, with no physical VESC/CAN/serial devices passed through. No host ROS or hardware GPU/Vulkan is required for this CPU/2D browser view.</p>
+      <p><strong>Simulation only. Never use this controller to command a physical car.</strong> Supplied track prior + Gym odometry following is not fresh SLAM, unknown-track exploration or LiDAR-only autonomy.</p>
+    </section>
+    <section id="downloads">
+      <h2>Choose a setup download</h2>
+      <div class="grid cards">
+        <article><h3>Offline kit — recommended for another PC</h3><p>Includes the real dependency Docker image, application, all 23 map datasets, complete vendor sources/licenses, Windows launchers, Linux shortcut installer and validation report. No ROS image rebuild is required.</p>
+          <div class="downloads"><a class="button primary" href="https://github.com/boscook/RoboRacer-RMIT/releases/download/f1tenth-sandbox-20261027T184947163160Z/RoboRacer_F1TENTH_20261027T184947163160Z.tar.gz">Offline kit · 450,042,876 bytes</a><a class="button" href="https://github.com/boscook/RoboRacer-RMIT/releases/download/f1tenth-sandbox-20261027T184947163160Z/RoboRacer_F1TENTH_20261027T184947163160Z.tar.gz.sha256">Offline checksum</a></div>
+          <p class="muted">Docker access, Python 3.10+ and a desktop browser are still prerequisites. The bundled offline image is x86_64/amd64, not an ARM/Jetson image.</p></article>
+        <article><h3>Source-only setup — smaller download</h3><p>Includes the custom file, Dockerfile, pinned dependencies, upstream physics/bridge sources, all map datasets and licenses. It intentionally omits the Docker image; first launch builds it and needs internet.</p>
+          <div class="downloads"><a class="button primary" href="downloads/RoboRacer_F1TENTH_Source_eaad55f5d6a8.zip" download>Source setup ZIP</a><a class="button" href="downloads/SHA256SUMS.txt" download>Download checksums</a></div>
+          <p class="muted">Extract the complete folder, not just the Python file. Explicit local builds are recorded separately from the prebuilt validated runtime.</p></article>
+      </div>
+      <div class="downloads">
+        <a class="button" href="downloads/F1TENTH_RACER.py" download>Custom Python source</a>
+        <a class="button" href="downloads/README.md" download>Detailed setup guide</a>
+        <a class="button" href="downloads/VALIDATION_REPORT.json">Validation report</a>
+        <a class="button" href="downloads/SOURCE_LOCK.json">Upstream source/map locks</a>
+        <a class="button" href="downloads/PUBLICATION_MANIFEST.json">Release provenance</a>
+      </div>
+      <p>All custom host/controller/audit/view logic is in <code>F1TENTH_RACER.py</code>. External ROS/simulator libraries, maps and launch wrappers remain separate dependencies. Existing machine-specific shortcuts, active leases, web nonces, session logs and local kit identity are not part of these downloads.</p>
+    </section>
+    <section id="windows">
+      <h2>Windows setup</h2>
+      <ol>
+        <li>Have <strong>Ubuntu WSL</strong> and <strong>Docker Desktop</strong> with Linux containers/Ubuntu integration available.</li>
+        <li>Extract the full offline kit or source ZIP into a writable folder.</li>
+        <li>Inside <code>RoboRacer_F1TENTH</code>, double-click <strong>START_F1TENTH.bat</strong>. It loads/builds the image as needed and opens the local app.</li>
+        <li>Use <strong>STOP_F1TENTH.bat</strong> or the red local-app STOP button. No ROS commands need to be typed.</li>
+      </ol>
+      <p>The original Capstone workspace also has convenience buttons <code>RUN_F1TENTH.bat</code> and <code>STOP_F1TENTH.bat</code>. The extracted standalone kit uses its inside-folder Start/Stop names. Keep the launcher window running/minimised; closing it expires the host lease and stops this sandbox.</p>
+      <p>The local UI has the 23-track selector, actual vehicle/trail, optional sampled actual LiDAR, zoom/pan and a Follow vehicle option. In a narrow window, scroll below the controls to see the map. Select a track and press Start/load; the prior session is stopped first. STOP cancels pending starts and requires a new explicit Start.</p>
+    </section>
+    <section id="ubuntu">
+      <h2>Native Ubuntu / another PC</h2>
+      <ol>
+        <li>Transfer/extract the offline archive into a writable Linux home directory. Keep the entire folder together.</li>
+        <li>Use a native <strong>x86_64</strong> Linux PC with Docker access, Python 3.10+ and a browser. No host ROS or GPU driver is required by this 2D setup.</li>
+        <li>Run <strong>INSTALL_LINUX_SHORTCUTS.sh</strong> as a program, allowing executable permission if your file manager asks.</li>
+        <li>Press Super and find <strong>RoboRacer F1TENTH Start / STOP</strong>. First launch loads the included image and opens the local view.</li>
+      </ol>
+      <div class="notice">The setup was exercised on Windows + Ubuntu WSL + Linux Docker. Native Ubuntu on the other PC has <strong>not</strong> been driven/GUI-tested here. Rehearse driving and STOP on that PC before presenting. The source-only ZIP requires internet for the first image build.</div>
+    </section>
+    <section id="validation">
+      <h2>Actual validation — not a new AutoDRIVE record</h2>
+      <p>All 23 maps passed map/line/clearance data checks. <strong>Only Melbourne has driven-lap validation here.</strong> Its supplied centreline is approximately 474.20 m; the supplied wall-hugging raceline did not meet the chosen tracking allowance, and the selection/reason is recorded.</p>
+      <div class="table-scroll"><table><thead><tr><th>Melbourne run</th><th>Simulation time</th><th>Wall time</th><th>Result</th></tr></thead><tbody>
+        <tr><td>First qualified standing-start lap</td><td>79.790 s</td><td>84.579 s</td><td>Full coverage, zero collisions, verified stopping</td></tr>
+        <tr><td>Current-code Windows-launch lap</td><td>79.760 s</td><td>87.522 s</td><td>Full coverage, zero collisions at that lap</td></tr>
+        <tr><td>Earlier slow integration trial</td><td>62.110 s</td><td>103.185 s</td><td>Factor 0.602; rejected as real-time-unqualified</td></tr>
+      </tbody></table></div>
+      <p>Actual in-motion Windows STOP verified stationary disarming. An independent read-only ROS observer received genuine 1,080-beam scans, odometry, map and native state without sending motor commands. A controlled <em>real simulated wall collision</em> after 65 seconds verified standstill, one upstream reset, a lower pace and 8.060 m of resumed travel; it claims no lap and is disabled in normal launchers. STOP also cancelled a queued Monza start with no later arming.</p>
+      <p>Stock physics source, 0.01 s RK4 timestep and vehicle parameters remain. <code>--max-speed 0</code> means no extra flat software ceiling; the stock physical maximum is 20 m/s, and the initial pace is 70% of a stock-derived profile. Eligible clean laps require actual gate/native-counter progress, travel/coverage and simulation/wall-time agreement. Collisions, partial laps and failures remain recorded.</p>
+      <p><strong>Do not compare these times with AutoDRIVE's 5.8218-second lap:</strong> the track, length, dynamics, controller and clock context differ. This is also not physical-car safety or LiDAR-only autonomy validation.</p>
+      <figure><a href="assets/melbourne-validation.png"><img class="map" src="assets/melbourne-validation.png" alt="Actual F1TENTH Melbourne odometry over the supplied occupancy map and centreline, with simulation and wall times separately labelled."></a><figcaption>Provided map/centreline and actual ROS odometry, not new SLAM or a Unity/RViz screenshot. Equal metric axes. Upstream map attribution retained.</figcaption></figure>
+      <figure><a href="assets/clock-speed-validation.png"><img class="map" src="assets/clock-speed-validation.png" alt="Actual F1TENTH speed requests, odometry and native simulation clock plotted against recorded wall time without time rescaling."></a><figcaption>Actual speed/clocks from the qualified current-code full lap; wall/simulation time are not silently interchanged.</figcaption></figure>
+    </section>
+    <section id="maps">
+      <h2>Supplied track catalog</h2>
+      <p>Map pixels, resolution and origin are preserved. Supplied racelines are checked against a sampled inflated footprint; where needed, the provided centreline is selected explicitly. Montreal and Shanghai have no supplied raceline CSV. These are data/clearance checks, not all-track lap certificates.</p>
+      <div class="table-scroll"><table><thead><tr><th>Track</th><th>Selected prior</th><th>Reference length</th></tr></thead><tbody id="catalog"><tr><td colspan="3">See the downloadable validation report for all 23 tracks.</td></tr></tbody></table></div>
+    </section>
+    <section>
+      <h2>Sources, licenses and attribution</h2>
+      <p><a href="https://github.com/f1tenth/f1tenth_gym">F1TENTH Gym</a> and <a href="https://github.com/f1tenth/f1tenth_gym_ros">the ROS bridge</a> retain their MIT licenses. The <a href="https://github.com/f1tenth/f1tenth_racetracks">supplied racetrack repository</a> is GPL-3.0; its complete data/source/license and upstream attribution are included. Source/image hashes and exact commits are pinned. The wrapper adapts the legacy Gym API, ROS declarations and publication scheduling; it does not edit the physics source or original maps.</p>
+      <p>The racetrack project attributes its original database to Alexander Heilmeier / TUM and its original centreline data to OpenStreetMap. Retain those notices and the upstream citation when redistributing. <a href="downloads/THIRD_PARTY_NOTICES.md" download>Download the attribution notes</a>.</p>
+      <p><a href="../simulator-benchmark.html">Separate AutoDRIVE benchmark</a> · <a href="https://github.com/boscook/RoboRacer-RMIT">Repository</a> · <a href="https://github.com/boscook/RoboRacer-RMIT/releases/tag/f1tenth-sandbox-20261027T184947163160Z">Offline kit release</a></p>
+    </section>
+  </main>
+  <footer><div class="wrap">RoboRacer RMIT · F1TENTH local setup · Existing AutoDRIVE and physical project preserved separately</div></footer>
+  <script>
+    fetch('downloads/VALIDATION_REPORT.json').then(r=>r.json()).then(data=>{
+      const body=document.getElementById('catalog');body.replaceChildren();
+      Object.entries(data.map_checks).forEach(([name,item])=>{
+        const row=document.createElement('tr');[name,item.prior,item.length_m.toFixed(2)+' m'].forEach(value=>{const cell=document.createElement('td');cell.textContent=value;row.appendChild(cell);});body.appendChild(row);
+      });
+    }).catch(()=>{});
+  </script>
+</body>
+</html>

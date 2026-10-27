@@ -1,0 +1,276 @@
+{
+  "created_utc": "2026-10-27T18:45:57.934775+00:00",
+  "simulator": "F1TENTH Gym / ROS 2 (not AutoDRIVE)",
+  "code_sha256": "eaad55f5d6a8b620d7c3c6a8b7c953608dea727c29b14cdff70d885a875ec353",
+  "image_lock": {
+    "created_utc": "2026-10-27T17:42:43.037214+00:00",
+    "tag": "capstone-f1tenth:humble-v1",
+    "id": "sha256:04531a0cfb66ea11294a3bc5702a4eb9a9916b88f756c9bce279d3577e333a8b",
+    "runtime_fingerprint": "3045ba55d57e509cb9acad191960cfc68b2c588f5e2e46bac5f5e859dbc59b94",
+    "source_lock_sha256": "a1aeb5cd55e4b6cb0dd7d6f1c7db23000348fe36f7cb61ee3a7087d5e69f76a7",
+    "base": "ros:humble-ros-base-jammy@sha256:860e53793ccf575e5369b5e9a19939de2bfcfb46a299954d06f54f2af54fed19",
+    "architecture": "amd64",
+    "note": "Fingerprint uses ordered filesystem layers and runtime configuration; allows equivalent Docker classic/containerd manifest IDs. Physics/source lock checked independently before arming."
+  },
+  "source_lock_sha256": "a1aeb5cd55e4b6cb0dd7d6f1c7db23000348fe36f7cb61ee3a7087d5e69f76a7",
+  "all_23_maps_data_clearance_validated": true,
+  "map_checks": {
+    "Austin": {
+      "valid": true,
+      "prior": "supplied centreline",
+      "length_m": 420.9540182106541
+    },
+    "BrandsHatch": {
+      "valid": true,
+      "prior": "supplied raceline",
+      "length_m": 350.8490560671684
+    },
+    "Budapest": {
+      "valid": true,
+      "prior": "supplied raceline",
+      "length_m": 390.76676346596133
+    },
+    "Catalunya": {
+      "valid": true,
+      "prior": "supplied raceline",
+      "length_m": 403.81825491758366
+    },
+    "Hockenheim": {
+      "valid": true,
+      "prior": "supplied centreline",
+      "length_m": 359.78441748097464
+    },
+    "IMS": {
+      "valid": true,
+      "prior": "supplied centreline",
+      "length_m": 293.09554565977083
+    },
+    "Melbourne": {
+      "valid": true,
+      "prior": "supplied centreline",
+      "length_m": 474.2044693583533
+    },
+    "Mexico City": {
+      "valid": true,
+      "prior": "supplied centreline",
+      "length_m": 356.57489519061687
+    },
+    "Montreal": {
+      "valid": true,
+      "prior": "supplied centreline",
+      "length_m": 284.98740800829114
+    },
+    "Monza": {
+      "valid": true,
+      "prior": "supplied centreline",
+      "length_m": 446.04048478641545
+    },
+    "MoscowRaceway": {
+      "valid": true,
+      "prior": "supplied centreline",
+      "length_m": 322.6615494315606
+    },
+    "Nuerburgring": {
+      "valid": true,
+      "prior": "supplied centreline",
+      "length_m": 446.0622064479398
+    },
+    "Oschersleben": {
+      "valid": true,
+      "prior": "supplied centreline",
+      "length_m": 260.67112222390506
+    },
+    "Sakhir": {
+      "valid": true,
+      "prior": "supplied centreline",
+      "length_m": 441.8567444800388
+    },
+    "SaoPaulo": {
+      "valid": true,
+      "prior": "supplied centreline",
+      "length_m": 344.64470707705647
+    },
+    "Sepang": {
+      "valid": true,
+      "prior": "supplied raceline",
+      "length_m": 473.32669650957183
+    },
+    "Shanghai": {
+      "valid": true,
+      "prior": "supplied centreline",
+      "length_m": 497.5137293430089
+    },
+    "Silverstone": {
+      "valid": true,
+      "prior": "supplied centreline",
+      "length_m": 457.8801085043685
+    },
+    "Sochi": {
+      "valid": true,
+      "prior": "supplied centreline",
+      "length_m": 463.7238009410084
+    },
+    "Spa": {
+      "valid": true,
+      "prior": "supplied centreline",
+      "length_m": 554.3888207678742
+    },
+    "Spielberg": {
+      "valid": true,
+      "prior": "supplied centreline",
+      "length_m": 343.27919687197686
+    },
+    "YasMarina": {
+      "valid": true,
+      "prior": "supplied centreline",
+      "length_m": 397.9073544113646
+    },
+    "Zandvoort": {
+      "valid": true,
+      "prior": "supplied centreline",
+      "length_m": 387.8942281197585
+    }
+  },
+  "stock_physics_source_verified_unmodified": true,
+  "stock_timestep_s": 0.01,
+  "stock_integrator": "RK4",
+  "first_qualified_full_lap": {
+    "run": "f1tenth-20261027T180359950770Z",
+    "event": {
+      "completed": true,
+      "lap": 1,
+      "simulator_seconds": 79.79000000000403,
+      "wall_seconds": 84.57936450700072,
+      "distance_m": 474.83954732471534,
+      "coverage_fraction": 1.0,
+      "collision": false,
+      "teleport": false,
+      "native_laps_start": 0,
+      "native_laps_finish": 1,
+      "standing_start": true,
+      "real_time_factor": 0.9433743143506326,
+      "valid_clean_full_lap": true,
+      "track": "Melbourne",
+      "attempt": 1,
+      "total_collisions": 0,
+      "pace": 0.7,
+      "simulator": "F1TENTH Gym (not AutoDRIVE)"
+    },
+    "result": {
+      "reason": "validation_laps_complete",
+      "stationary_disarmed_verified": true,
+      "best_clean_simulator_lap_s": 79.79000000000403,
+      "completed_laps": 1,
+      "eligible_clean_laps": 1,
+      "total_collisions": 0,
+      "attempts": 1,
+      "simulator": "F1TENTH Gym (not AutoDRIVE)",
+      "native_linux_host_verified": false
+    }
+  },
+  "current_code_qualified_full_lap": {
+    "run": "f1tenth-20261027T184018542154Z",
+    "events": [
+      {
+        "completed": true,
+        "lap": 1,
+        "simulator_seconds": 79.76000000000401,
+        "wall_seconds": 87.52225977899798,
+        "distance_m": 474.5165339241927,
+        "coverage_fraction": 1.0,
+        "collision": false,
+        "teleport": false,
+        "native_laps_start": 0,
+        "native_laps_finish": 1,
+        "standing_start": true,
+        "real_time_factor": 0.9113110219206587,
+        "valid_clean_full_lap": true,
+        "track": "Melbourne",
+        "attempt": 1,
+        "total_collisions": 0,
+        "pace": 0.7,
+        "simulator": "F1TENTH Gym (not AutoDRIVE)"
+      }
+    ],
+    "source_hash_matches_current": true
+  },
+  "windows_start_actual_launcher_verified": true,
+  "windows_stop_while_moving_verified": true,
+  "independent_ros_observer_verified": true,
+  "scan_beams": 1080,
+  "ros_domain": 77,
+  "controlled_collision_recovery_verified": true,
+  "controlled_recovery_run": "f1tenth-20261027T183312392535Z",
+  "recovery_event": {
+    "kind": "collision_recovery_validation_passed",
+    "utc": "2026-10-27T18:34:33.640967+00:00",
+    "attempt": 2,
+    "measured_post_reset_distance_m": 8.06017528938532,
+    "native": {
+      "step": 6468,
+      "simulator_time_s": 1.400000000000001,
+      "native_laps": 0,
+      "native_lap_time_s": 1.400000000000001,
+      "native_done": false,
+      "collision": false,
+      "collisions": 1,
+      "reset_count": 1,
+      "halted": false,
+      "halt_reason": ""
+    },
+    "stationary_stop_before_reset_verified": true,
+    "no_complete_lap_claimed": true
+  },
+  "controlled_recovery_is_not_a_lap_record": true,
+  "queued_start_stop_cancellation_verified": true,
+  "queued_cancel_test": {
+    "captured_utc": "2026-10-27T18:37:19.494715+00:00",
+    "start_request": {
+      "start_requested": true,
+      "request": {
+        "track": "Monza",
+        "generation": 2,
+        "started": 1793126227.4432735
+      }
+    },
+    "stop_ack": {
+      "stop_requested": true
+    },
+    "stop_epoch": 1793126227.4524114,
+    "late_arm_events": [],
+    "final_host_phase": "stopped",
+    "cancelled_pending_track": "Monza",
+    "no_drive_after_stop": true
+  },
+  "native_application_shortcut_fixture_passed": true,
+  "native_ubuntu_host_driving_verified": false,
+  "path_alias_instance_scope_verified": true,
+  "simulator_runs_without_host_gpu": true,
+  "paused_for_export": {
+    "run": "f1tenth-20261027T184018542154Z",
+    "result": {
+      "reason": "explicit_stop",
+      "stationary_disarmed_verified": true,
+      "best_clean_simulator_lap_s": 79.76000000000401,
+      "completed_laps": 3,
+      "eligible_clean_laps": 1,
+      "total_collisions": 0,
+      "attempts": 1,
+      "simulator": "F1TENTH Gym (not AutoDRIVE)",
+      "native_linux_host_verified": false
+    }
+  },
+  "limitations": [
+    "Only Melbourne has driven-lap validation; all 23 maps have data/clearance preflight only.",
+    "Provided centreline/raceline + actual simulator odometry, not fresh SLAM or LiDAR-only autonomy.",
+    "Simulation time and wall time are reported separately; real-time-qualified laps require agreement.",
+    "Different track/length/physics from AutoDRIVE; do not compare these times with the old 5.8218 s result.",
+    "Native Ubuntu on the other PC is not yet exercised; Docker/Python/browser prerequisites still apply."
+  ],
+  "failed_setup_evidence_retained": [
+    "f1tenth-20261027T172332730536Z: transient lease read caused verified stop",
+    "f1tenth-20261027T173156184902Z: command callback starvation caused verified stop",
+    "f1tenth-20261027T173953892022Z: slow wall/simulation lap rejected, later collision/reset/preflight-timeout retained"
+  ],
+  "note": "No fabricated map, lap, collision, pose, clock or physics result. Diagnostic collision was produced by real steering/speed inputs in the sandbox; default launchers never enable that test."
+}

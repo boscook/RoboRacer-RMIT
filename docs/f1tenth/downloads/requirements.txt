@@ -1,0 +1,14 @@
+# Legacy physics source with a Gym API-wrapper compatibility adapter.
+# Python 3.10 / ROS 2 Humble, isolated from the existing AutoDRIVE image.
+numpy==1.21.6
+scipy==1.10.1
+numba==0.57.1
+llvmlite==0.40.1
+gym==0.23.1
+gym-notices==0.0.8
+cloudpickle==2.2.1
+Pillow==9.5.0
+PyYAML==6.0.1
+pyglet==1.5.27
+PyOpenGL==3.1.7
+transforms3d==0.4.1

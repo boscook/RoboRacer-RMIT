@@ -16,12 +16,21 @@
       <div class="actions">
         <a class="button primary" href="https://github.com/boscook/RoboRacer-RMIT">View Source Code</a>
         <a class="button" href="simulator-benchmark.html">Latest Simulator Code + Track Map</a>
+        <a class="button" href="f1tenth/">F1TENTH · 23-track setup</a>
         <a class="button" href="#architecture">Architecture</a>
       </div>
     </div>
   </header>
 
   <main class="wrap">
+    <section aria-labelledby="f1tenth-release">
+      <p class="eyebrow">Separate 2D simulator · Windows and Ubuntu setup</p>
+      <h2 id="f1tenth-release">F1TENTH maps, controller and offline kit</h2>
+      <p>Run the genuine F1TENTH Gym physics and ROS 2 bridge locally with 23 supplied tracks. Includes Windows Start/Stop controls, a local 2D browser view, source/image locks, actual validation results and an offline Ubuntu transfer kit. No host ROS or GPU is required for this setup.</p>
+      <div class="notice">GitHub Pages hosts downloads and documentation, not the Docker/ROS simulation itself. All 23 maps passed data checks; only Melbourne has driven-lap validation here. This uses supplied track priors and actual Gym odometry, not fresh SLAM or physical-car validation. Its times are not comparable to AutoDRIVE.</div>
+      <div class="actions"><a class="button primary" href="f1tenth/">Open F1TENTH setup and downloads</a></div>
+    </section>
+
     <section aria-labelledby="simulator-release">
       <p class="eyebrow">Simulation-only release · Joint line and median pace tuning</p>
       <h2 id="simulator-release">Single-file simulator benchmark</h2>

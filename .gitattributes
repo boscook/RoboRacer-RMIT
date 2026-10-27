@@ -3,3 +3,4 @@ docs/downloads/** -text
 docs/releases/** -text
 # Preserve the recorded CSV's original CRLF bytes without false whitespace errors.
 docs/downloads/SPEED_PROFILE.csv whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+docs/f1tenth/downloads/** -text
